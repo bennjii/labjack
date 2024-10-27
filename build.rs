@@ -93,14 +93,14 @@ fn main() {
     writeln!(&mut file, "impl {} {{", LOOKUP_TABLE).unwrap();
     writeln!(
         &mut file,
-        "     pub const fn raw(&self) -> (u32, u32) {{",
+        "    pub const fn raw(&self) -> crate::core::LabJackEntity {{",
     )
     .unwrap();
-    writeln!(&mut file, "         match self {{",).unwrap();
+    writeln!(&mut file, "        match self {{",).unwrap();
     for (key, (address, data_type)) in map {
         writeln!(
             &mut file,
-            "    {}::{} => ({}, {}),",
+            "            {}::{} => crate::core::LabJackEntity::new({}, {}),",
             LOOKUP_TABLE,
             key,
             address.expect("Must have address"),

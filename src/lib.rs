@@ -9,4 +9,5 @@ pub mod prelude {
     }
 
     pub use crate::core::LabJack;
+    pub use crate::core::*;
 }
