@@ -1,5 +1,8 @@
 pub mod core;
 
+#[macro_use]
+extern crate enum_primitive;
+
 #[cfg(test)]
 pub mod test;
 

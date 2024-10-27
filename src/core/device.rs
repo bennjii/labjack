@@ -10,7 +10,7 @@ pub struct LabJackDevice {
 
     pub max_bytes_per_megabyte: i32,
     pub serial_number: i32,
-    pub port: i32,
+    pub port: u16,
 }
 
 impl Display for LabJackDevice {
