@@ -10,13 +10,12 @@ use std::net::UdpSocket;
 use std::time::Duration;
 
 use crate::core::{
-    modbus::{Error, Function, ModbusFeedbackFunction, TcpCompositor},
+    modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
     ConnectionType, DeviceType, LabJackDevice,
 };
 
 const BROADCAST_IP: &str = "255.255.255.255";
 const MODBUS_PORT: u16 = 502;
-const FEEDBACK_FUNCTION: u8 = 0x4C;
 
 pub struct Discover;
 
@@ -31,7 +30,7 @@ impl Discover {
         let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
 
         let read_product_id = ModbusFeedbackFunction::ReadRegisters(0xEA60, 1);
-        let (buf, _, _) = compositor.compose_read(&Function::Feedback(&[read_product_id]))?;
+        let (buf, _, _) = compositor.compose_feedback(&[read_product_id])?;
 
         broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_PORT))?;
 

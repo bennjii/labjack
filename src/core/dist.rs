@@ -1,7 +1,7 @@
 use crate::core::connection;
 
 use super::{
-    ConnectionType, DeviceType, LabJackDevice
+    modbus::Error, ConnectionType, DeviceType, LabJackDevice
 };
 
 pub struct LabJack;
@@ -11,12 +11,12 @@ impl LabJack {
         device_type: DeviceType,
         connection_type: ConnectionType,
         id: i32,
-    ) -> Option<LabJackDevice> {
-        let devices = connection::discover::Discover::search(device_type, connection_type).ok()?;
-        devices.iter().find(|device| device.serial_number == id).copied()
+    ) -> Result<LabJackDevice, Error> {
+        let devices = connection::discover::Discover::search(device_type, connection_type)?;
+        devices.iter().find(|device| device.serial_number == id).copied().ok_or(Error::DeviceNotFound)
     }
     
-    pub fn connect_by_id(id: i32) -> Option<LabJackDevice> {
+    pub fn connect_by_id(id: i32) -> Result<LabJackDevice, Error> {
         LabJack::connect(DeviceType::ANY, ConnectionType::ANY, id)
     }
 }
