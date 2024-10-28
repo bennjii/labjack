@@ -50,7 +50,7 @@ pub fn pack_bytes(bytes: &[u8]) -> Result<Vec<u16>, io::Error> {
         return Err(io::Error::from_raw_os_error(22));
     }
 
-    let mut res = vec![0; size / 2 + 1];
+    let mut res = Vec::with_capacity(size / 2 + 1);
     let mut rdr = Cursor::new(bytes);
     for _ in 0..size / 2 {
         res.push(rdr.read_u16::<BigEndian>()?);

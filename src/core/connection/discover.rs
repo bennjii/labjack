@@ -9,7 +9,10 @@
 use std::net::UdpSocket;
 use std::time::Duration;
 
-use crate::core::{ConnectionType, DeviceType, LabJackDevice};
+use crate::core::{
+    modbus::{Error, Function, ModbusFeedbackFunction, TcpCompositor},
+    ConnectionType, DeviceType, LabJackDevice,
+};
 
 const BROADCAST_IP: &str = "255.255.255.255";
 const MODBUS_PORT: u16 = 502;
@@ -21,13 +24,16 @@ impl Discover {
     pub fn search(
         _device_type: DeviceType,
         _connection_type: ConnectionType,
-    ) -> Result<Vec<LabJackDevice>, std::io::Error> {
+    ) -> Result<Vec<LabJackDevice>, Error> {
         // Send broadcast request.
         let broadcast = Discover::broadcast(Duration::from_secs(2))?;
-        broadcast.send_to(
-            &Discover::build_modbus_request(),
-            (BROADCAST_IP, MODBUS_PORT),
-        )?;
+        let mut transaction_id = 0;
+        let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
+
+        let read_product_id = ModbusFeedbackFunction::ReadRegisters(0xEA60, 1);
+        let (buf, _, _) = compositor.compose_read(&Function::Feedback(&[read_product_id]))?;
+
+        broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_PORT))?;
 
         // Collect all devices from the
         std::iter::from_fn(|| {
@@ -47,7 +53,7 @@ impl Discover {
                     }))
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
-                Err(error) => Some(Err(error)),
+                Err(error) => Some(Err(Error::Io(error))),
             }
         })
         .collect::<Result<Vec<_>, _>>()
@@ -59,17 +65,37 @@ impl Discover {
         socket.set_read_timeout(Some(duration))?;
         Ok(socket)
     }
+}
 
-    fn build_modbus_request() -> Vec<u8> {
-        vec![
-            0x00, 0x01, // Transaction Identifier (arbitrary)
-            0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)
-            0x00, 0x06, // Length (6 bytes to follow)
-            0x01, // Unit Identifier (slave address, usually 1)
-            FEEDBACK_FUNCTION, // Function Code (Read Holding Registers)
-            0x00, // Frame Type
-            0xEA, 0x60, // Starting Register (60,000 = T7 Product ID)
-            0x02, // Quantity of Registers (1)
-        ]
+#[cfg(test)]
+mod test {
+    use crate::core::{
+        discover::FEEDBACK_FUNCTION,
+        modbus::{ModbusFeedbackFunction, TcpCompositor},
+    };
+
+    #[test]
+    fn feedback_function() {
+        let mut transaction_id = 0;
+        let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
+
+        let read_product_id = ModbusFeedbackFunction::ReadRegisters(0xEA60, 2);
+        let (buf, _, _) = compositor
+            .compose_feedback(&[read_product_id])
+            .expect("Could not compose MBFB message");
+
+        assert_eq!(
+            buf,
+            vec![
+                0x00, 0x01, // Transaction Identifier (arbitrary)
+                0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)
+                0x00, 0x06, // Length (6 bytes to follow)
+                0x01, // Unit Identifier (slave address, usually 1)
+                FEEDBACK_FUNCTION, // Function Code (Read Holding Registers)
+                0x00, // Frame Type
+                0xEA, 0x60, // Starting Register (60,000 = T7 Product ID)
+                0x02, // Quantity of Registers (2)
+            ]
+        )
     }
 }

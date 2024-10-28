@@ -31,6 +31,7 @@ pub enum Reason {
     Custom(String),
 }
 
+#[derive(Debug)]
 pub enum Error {
     Exception(ExceptionCode),
     Io(io::Error),

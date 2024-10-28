@@ -42,10 +42,28 @@ pub trait Client: Transport {
         self.write(&mut buff)
     }
 
-    fn feedback(&mut self, addr: Address) -> Result<(), Self::Error> {
+    fn feedback(&mut self, fns: &[ModbusFeedbackFunction]) -> Result<(), Self::Error> {
         let mut buff = vec![0; MODBUS_HEADER_SIZE];
-        buff.write_u8(Function::Feedback(addr).code())?;
-        // -- HANDLE DIFFERENT FRAMES --
+        buff.write_u8(Function::Feedback(fns).code())?;
+        
+        for frame in fns {
+            buff.write_u8(frame.code())?;
+            
+            match frame {
+                ModbusFeedbackFunction::ReadRegisters(addr, quant) => {
+                    buff.write_u16::<BigEndian>(*addr)?;
+                    buff.write_u8(*quant)?;
+                }
+                ModbusFeedbackFunction::WriteRegisters(addr, values) => {
+                    buff.write_u16::<BigEndian>(*addr)?;
+                    buff.write_u8(values.len() as u8)?;
+                    for v in *values {
+                        buff.write_u8(*v)?;
+                    }
+                }
+            }
+        }
+        
         self.write(&mut buff)
     }
 }

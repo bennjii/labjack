@@ -8,9 +8,14 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use enum_primitive::FromPrimitive;
 
 use super::{
-    Client, Error, ExceptionCode, Function, Reason, Transport, MODBUS_HEADER_SIZE,
-    MODBUS_MAX_PACKET_SIZE, MODBUS_PROTOCOL_TCP,
+    Client, Error, ExceptionCode, Function, ModbusFeedbackFunction, Reason, Transport,
+    MODBUS_HEADER_SIZE, MODBUS_MAX_PACKET_SIZE, MODBUS_PROTOCOL_TCP,
 };
+
+pub struct TcpCompositor<'a> {
+    transaction_id: &'a mut u16,
+    unit_id: u8,
+}
 
 pub struct TcpTransport {
     tid: u16,
@@ -19,7 +24,7 @@ pub struct TcpTransport {
 }
 
 #[derive(Debug, PartialEq)]
-struct Header {
+pub struct Header {
     transaction_id: u16,
     protocol_id: u16,
     length: u16,
@@ -27,12 +32,12 @@ struct Header {
 }
 
 impl Header {
-    fn new(transport: &mut TcpTransport, len: u16) -> Header {
+    fn new(transport: &mut TcpCompositor, len: u16) -> Header {
         Header {
-            transaction_id: transport.new_tid(),
+            transaction_id: *transport.new_tid(),
             protocol_id: MODBUS_PROTOCOL_TCP,
             length: len - MODBUS_HEADER_SIZE as u16,
-            unit_id: transport.uid,
+            unit_id: transport.unit_id,
         }
     }
 
@@ -57,9 +62,11 @@ impl Header {
 }
 
 impl TcpTransport {
-    fn new_tid(&mut self) -> u16 {
-        self.tid = self.tid.wrapping_add(1);
-        self.tid
+    fn compositor(&mut self) -> TcpCompositor {
+        TcpCompositor {
+            transaction_id: &mut self.tid,
+            unit_id: self.uid,
+        }
     }
 
     fn validate_response_header(req: &Header, resp: &Header) -> Result<(), Error> {
@@ -98,10 +105,20 @@ impl TcpTransport {
     }
 }
 
-impl Transport for TcpTransport {
-    type Error = crate::prelude::modbus::Error;
+impl<'a> TcpCompositor<'a> {
+    pub fn new(transaction_id: &'a mut u16, unit_id: u8) -> TcpCompositor<'a> {
+        TcpCompositor {
+            transaction_id,
+            unit_id,
+        }
+    }
 
-    fn read(&mut self, function: &super::Function) -> Result<Box<[u8]>, Self::Error> {
+    fn new_tid(&mut self) -> &u16 {
+        *self.transaction_id = self.transaction_id.wrapping_add(1);
+        self.transaction_id
+    }
+
+    pub fn compose_read(&mut self, function: &Function) -> Result<(Vec<u8>, Header, usize), Error> {
         let (addr, count, expected_bytes) = match *function {
             Function::ReadHoldingRegisters(a, c) | Function::ReadInputRegisters(a, c) => {
                 (a, c, 2 * c as usize)
@@ -117,30 +134,20 @@ impl Transport for TcpTransport {
             return Err(Error::InvalidData(Reason::UnexpectedReplySize));
         }
 
+        // The length in a feedback function might be different if
+        // using a different frame type.
         let header = Header::new(self, MODBUS_HEADER_SIZE as u16 + 6u16);
         let mut buff = header.pack()?;
+
         buff.write_u8(function.code())?;
+
         buff.write_u16::<BigEndian>(addr)?;
         buff.write_u16::<BigEndian>(count)?;
 
-        match self.stream.write_all(&buff) {
-            Ok(_s) => {
-                let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
-                match self.stream.read(&mut reply) {
-                    Ok(_s) => {
-                        let resp_hd = Header::unpack(&reply[..MODBUS_HEADER_SIZE])?;
-                        TcpTransport::validate_response_header(&header, &resp_hd)?;
-                        TcpTransport::validate_response_code(&buff, &reply)?;
-                        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
-                    }
-                    Err(e) => Err(Error::Io(e)),
-                }
-            }
-            Err(e) => Err(Error::Io(e)),
-        }
+        Ok((buff, header, expected_bytes))
     }
 
-    fn write(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+    pub fn compose_write(&mut self, buf: &mut [u8]) -> Result<(Vec<u8>, Header), Error> {
         if buf.is_empty() {
             return Err(Error::InvalidData(Reason::SendBufferEmpty));
         }
@@ -156,6 +163,77 @@ impl Transport for TcpTransport {
             start.write_all(&head_buff)?;
         }
 
+        Ok((head_buff, header))
+    }
+
+    pub fn compose_feedback(
+        &mut self,
+        fns: &[ModbusFeedbackFunction],
+    ) -> Result<(Vec<u8>, Header, usize), Error> {
+        let mut read_return_size = 0;
+        
+        // Must account for unit ID and function ID (2 bytes) + base header size
+        let composed_size = fns.iter().fold(MODBUS_HEADER_SIZE + 2, |acc, f| match f {
+            ModbusFeedbackFunction::ReadRegisters(_, _) => {
+                read_return_size += 2;
+                acc + 4
+            }
+            ModbusFeedbackFunction::WriteRegisters(_, values) => acc + 4 + values.len(),
+        });
+
+        let header = Header::new(self, composed_size as u16);
+        let mut buff = header.pack()?;
+
+        buff.write_u8(Function::Feedback(fns).code())?;
+
+        for frame in fns {
+            buff.write_u8(frame.code())?;
+
+            match frame {
+                ModbusFeedbackFunction::ReadRegisters(addr, quant) => {
+                    buff.write_u16::<BigEndian>(*addr)?;
+                    buff.write_u8(*quant)?;
+                }
+                ModbusFeedbackFunction::WriteRegisters(addr, values) => {
+                    buff.write_u16::<BigEndian>(*addr)?;
+                    buff.write_u8(values.len() as u8)?;
+                    for v in *values {
+                        buff.write_u8(*v)?;
+                    }
+                }
+            }
+        }
+
+        Ok((buff, header, 7 + read_return_size))
+    }
+}
+
+impl Transport for TcpTransport {
+    type Error = crate::prelude::modbus::Error;
+
+    fn read(&mut self, function: &super::Function) -> Result<Box<[u8]>, Self::Error> {
+        let (buf, header, expected_bytes) = self.compositor().compose_read(function)?;
+
+        match self.stream.write_all(&buf) {
+            Ok(_s) => {
+                let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
+                match self.stream.read(&mut reply) {
+                    Ok(_s) => {
+                        let resp_hd = Header::unpack(&reply[..MODBUS_HEADER_SIZE])?;
+                        TcpTransport::validate_response_header(&header, &resp_hd)?;
+                        TcpTransport::validate_response_code(&buf, &reply)?;
+                        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
+                    }
+                    Err(e) => Err(Error::Io(e)),
+                }
+            }
+            Err(e) => Err(Error::Io(e)),
+        }
+    }
+
+    fn write(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+        let (buf, header) = self.compositor().compose_write(buf)?;
+
         match self.stream.write_all(&buf) {
             Ok(_s) => {
                 let reply = &mut [0; 12];
@@ -163,7 +241,7 @@ impl Transport for TcpTransport {
                     Ok(_s) => {
                         let resp_hd = Header::unpack(reply)?;
                         TcpTransport::validate_response_header(&header, &resp_hd)?;
-                        TcpTransport::validate_response_code(buf, reply)
+                        TcpTransport::validate_response_code(buf.as_slice(), reply)
                     }
                     Err(e) => Err(Error::Io(e)),
                 }
