@@ -6,12 +6,8 @@
 //! by LJM's `ListAll` function, which is the
 //! logical equivalent we are aiming to replicate.
 
-use std::io::{BufRead, Read};
 use std::net::UdpSocket;
 use std::time::Duration;
-
-use modbus::tcp;
-use modbus::{Client, Coil};
 
 use crate::core::{ConnectionType, DeviceType, LabJackDevice};
 
@@ -65,7 +61,6 @@ impl Discover {
     }
 
     fn build_modbus_request() -> Vec<u8> {
-        modbus::Client::read_holding_registers(&mut self, address, quantity);
         vec![
             0x00, 0x01, // Transaction Identifier (arbitrary)
             0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)

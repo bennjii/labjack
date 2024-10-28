@@ -29,17 +29,6 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "enum_primitive",
- "modbus",
-]
-
-[[package]]
-name = "modbus"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8dabe32680802698a67f583677cdc1f0287f5d3e1fb49a1af2be8606e3ae7d7"
-dependencies = [
- "byteorder",
- "enum_primitive",
 ]
 
 [[package]]

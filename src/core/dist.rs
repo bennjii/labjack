@@ -12,7 +12,7 @@ impl LabJack {
         connection_type: ConnectionType,
         id: i32,
     ) -> Option<LabJackDevice> {
-        let devices = connection::discover::Discover::search(device_type, connection_type);
+        let devices = connection::discover::Discover::search(device_type, connection_type).ok()?;
         devices.iter().find(|device| device.serial_number == id).copied()
     }
     

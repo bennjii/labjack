@@ -1,5 +1,3 @@
-use std::path::Component;
-
 pub type Address = u16;
 pub type Quantity = u16;
 pub type Value = u16;

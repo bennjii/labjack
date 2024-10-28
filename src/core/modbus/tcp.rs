@@ -1,4 +1,3 @@
-use core::slice::SlicePattern;
 use std::{
     borrow::BorrowMut,
     io::{self, Read, Write},
@@ -13,7 +12,7 @@ use super::{
     MODBUS_MAX_PACKET_SIZE, MODBUS_PROTOCOL_TCP,
 };
 
-struct TcpTransport {
+pub struct TcpTransport {
     tid: u16,
     uid: u8,
     stream: TcpStream,
@@ -21,38 +20,38 @@ struct TcpTransport {
 
 #[derive(Debug, PartialEq)]
 struct Header {
-    tid: u16,
-    pid: u16,
-    len: u16,
-    uid: u8,
+    transaction_id: u16,
+    protocol_id: u16,
+    length: u16,
+    unit_id: u8,
 }
 
 impl Header {
     fn new(transport: &mut TcpTransport, len: u16) -> Header {
         Header {
-            tid: transport.new_tid(),
-            pid: MODBUS_PROTOCOL_TCP,
-            len: len - MODBUS_HEADER_SIZE as u16,
-            uid: transport.uid,
+            transaction_id: transport.new_tid(),
+            protocol_id: MODBUS_PROTOCOL_TCP,
+            length: len - MODBUS_HEADER_SIZE as u16,
+            unit_id: transport.uid,
         }
     }
 
     fn pack(&self) -> Result<Vec<u8>, Error> {
         let mut buff = vec![];
-        buff.write_u16::<BigEndian>(self.tid)?;
-        buff.write_u16::<BigEndian>(self.pid)?;
-        buff.write_u16::<BigEndian>(self.len)?;
-        buff.write_u8(self.uid)?;
+        buff.write_u16::<BigEndian>(self.transaction_id)?;
+        buff.write_u16::<BigEndian>(self.protocol_id)?;
+        buff.write_u16::<BigEndian>(self.length)?;
+        buff.write_u8(self.unit_id)?;
         Ok(buff)
     }
 
     fn unpack(buff: &[u8]) -> Result<Header, Error> {
         let mut rdr = io::Cursor::new(buff);
         Ok(Header {
-            tid: rdr.read_u16::<BigEndian>()?,
-            pid: rdr.read_u16::<BigEndian>()?,
-            len: rdr.read_u16::<BigEndian>()?,
-            uid: rdr.read_u8()?,
+            transaction_id: rdr.read_u16::<BigEndian>()?,
+            protocol_id: rdr.read_u16::<BigEndian>()?,
+            length: rdr.read_u16::<BigEndian>()?,
+            unit_id: rdr.read_u8()?,
         })
     }
 }
@@ -64,7 +63,7 @@ impl TcpTransport {
     }
 
     fn validate_response_header(req: &Header, resp: &Header) -> Result<(), Error> {
-        if req.tid != resp.tid || resp.pid != MODBUS_PROTOCOL_TCP {
+        if req.transaction_id != resp.transaction_id || resp.protocol_id != MODBUS_PROTOCOL_TCP {
             Err(Error::InvalidResponse)
         } else {
             Ok(())
@@ -100,7 +99,7 @@ impl TcpTransport {
 }
 
 impl Transport for TcpTransport {
-    type Error = Error;
+    type Error = crate::prelude::modbus::Error;
 
     fn read(&mut self, function: &super::Function) -> Result<Box<[u8]>, Self::Error> {
         let (addr, count, expected_bytes) = match *function {
