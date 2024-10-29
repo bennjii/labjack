@@ -25,10 +25,7 @@ const MODBUS_FEEDBACK_PORT: u16 = 52362;
 pub struct Discover;
 
 impl Discover {
-    pub fn search(
-        _device_type: DeviceType,
-        _connection_type: ConnectionType,
-    ) -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
+    pub fn search() -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
         // Send broadcast request.
         let broadcast = Discover::broadcast(Duration::from_secs(10))?;
         let mut transaction_id = 0;
@@ -43,7 +40,7 @@ impl Discover {
         let (buf, _, _) = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
         broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
-        // Collect all devices from the
+        // Collect all devices from the UDP broadcast
         Ok(std::iter::from_fn(move || {
             let mut buf = [0u8; 1024];
             match broadcast.recv_from(&mut buf) {

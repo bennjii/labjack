@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DeviceType {
     T4,
     T7,
