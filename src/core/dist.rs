@@ -1,3 +1,5 @@
+use log::warn;
+
 use super::{
     discover::Discover, modbus::Error, ConnectionType, DeviceType, LabJackDevice
 };
@@ -16,7 +18,7 @@ impl LabJack {
             .filter_map(|device| {
                 match device {
                     Err(error) => {
-                        eprintln!("Failure retriving device, {:?}", error);
+                        warn!("Failure retriving device, {:?}", error);
                         None
                     },
                     Ok(device) => Some(device)

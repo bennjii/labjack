@@ -49,20 +49,20 @@ fn main() {
                 .and_then(|v| v.split_once('='))
                 .and_then(|(a, b)| {
                     if line.contains("_ADDRESS") {
-                        a.split_once("_ADDRESS ").and_then(|(key, _)| {
+                        a.split_once("_ADDRESS ").map(|(key, _)| {
                             let addr = b.trim().parse::<u32>().ok();
                             if addr.is_none() {
                                 eprintln!("Could not parse address (integer) of value: {}", b);
                             }
-                            Some((to_camel_case(key), (addr, None)))
+                            (to_camel_case(key), (addr, None))
                         })
                     } else {
-                        a.split_once("_TYPE ").and_then(|(key, _)| {
+                        a.split_once("_TYPE ").map(|(key, _)| {
                             let d_type = b.trim().parse::<u32>().ok();
                             if d_type.is_none() {
                                 eprintln!("Could not parse datatype (integer) of value: {}", b);
                             }
-                            Some((to_camel_case(key), (None, d_type)))
+                            (to_camel_case(key), (None, d_type))
                         })
                     }
                 })

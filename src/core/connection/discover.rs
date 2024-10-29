@@ -9,6 +9,8 @@
 use std::net::UdpSocket;
 use std::time::Duration;
 
+use log::debug;
+
 use crate::{
     core::{
         modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
@@ -34,10 +36,10 @@ impl Discover {
 
         let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
         let serial_number_addr = translate::LookupTable::SerialNumber.raw().address as u16;
-        let max_bytes_er_ = translate::LookupTable::SerialNumber.raw().address as u16;
-
+        
         let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
         let read_serial_number = ModbusFeedbackFunction::ReadRegisters(serial_number_addr, 2);
+
         let (buf, _, _) = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
         broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
@@ -47,7 +49,7 @@ impl Discover {
             match broadcast.recv_from(&mut buf) {
                 Ok((size, addr)) => {
                     // 470033971 is 0x1C042633 is [28, 4, 38, 51]
-                    println!("Some LabJack Found! PacketSize={}, Addr={}", size, addr);
+                    debug!("Some LabJack Found! PacketSize={}, Addr={}", size, addr);
                     let device_type = match <[u8; 4]>::try_from(&buf[8..12]) {
                         Ok([0x41, 0x00, 0x00, 0x00]) => DeviceType::T8,
                         Ok([0x40, 0xE0, 0x00, 0x00]) => DeviceType::T7,
@@ -72,7 +74,6 @@ impl Discover {
                         port: addr.port(),
                         device_type,
                         serial_number,
-                        max_bytes_per_megabyte: 0,
                         // Only supports ethernet for now.
                         connection_type: ConnectionType::ETHERNET,
                     }))
@@ -85,7 +86,8 @@ impl Discover {
 
     fn broadcast(duration: Duration) -> Result<UdpSocket, std::io::Error> {
         let socket = UdpSocket::bind(("0.0.0.0", 0))?;
-        println!("Listening through ephemeral: {}", socket.local_addr()?);
+        debug!("Listening through ephemeral: {}", socket.local_addr()?);
+
         socket.set_broadcast(true)?;
         socket.set_read_timeout(Some(duration))?;
         Ok(socket)
