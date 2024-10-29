@@ -9,13 +9,16 @@
 use std::net::UdpSocket;
 use std::time::Duration;
 
-use crate::core::{
-    modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
-    ConnectionType, DeviceType, LabJackDevice,
+use crate::{
+    core::{
+        modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
+        ConnectionType, DeviceType, LabJackDevice,
+    },
+    prelude::translate,
 };
 
-const BROADCAST_IP: &str = "255.255.255.255";
-const MODBUS_PORT: u16 = 502;
+const BROADCAST_IP: &str = "192.168.255.255";
+const MODBUS_FEEDBACK_PORT: u16 = 52362;
 
 pub struct Discover;
 
@@ -23,43 +26,66 @@ impl Discover {
     pub fn search(
         _device_type: DeviceType,
         _connection_type: ConnectionType,
-    ) -> Result<Vec<LabJackDevice>, Error> {
+    ) -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
         // Send broadcast request.
-        let broadcast = Discover::broadcast(Duration::from_secs(2))?;
+        let broadcast = Discover::broadcast(Duration::from_secs(10))?;
         let mut transaction_id = 0;
         let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
 
-        let read_product_id = ModbusFeedbackFunction::ReadRegisters(0xEA60, 1);
-        let (buf, _, _) = compositor.compose_feedback(&[read_product_id])?;
+        let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
+        let serial_number_addr = translate::LookupTable::SerialNumber.raw().address as u16;
+        let max_bytes_er_ = translate::LookupTable::SerialNumber.raw().address as u16;
 
-        broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_PORT))?;
+        let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
+        let read_serial_number = ModbusFeedbackFunction::ReadRegisters(serial_number_addr, 2);
+        let (buf, _, _) = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
+        broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
         // Collect all devices from the
-        std::iter::from_fn(|| {
+        Ok(std::iter::from_fn(move || {
             let mut buf = [0u8; 1024];
             match broadcast.recv_from(&mut buf) {
                 Ok((size, addr)) => {
-                    println!("LabJack Found! PacketSize={}, Addr={}", size, addr);
-                    println!("=> Content={:?}", buf);
+                    // 470033971 is 0x1C042633 is [28, 4, 38, 51]
+                    println!("Some LabJack Found! PacketSize={}, Addr={}", size, addr);
+                    let device_type = match <[u8; 4]>::try_from(&buf[8..12]) {
+                        Ok([0x41, 0x00, 0x00, 0x00]) => DeviceType::T8,
+                        Ok([0x40, 0xE0, 0x00, 0x00]) => DeviceType::T7,
+                        Ok([0x40, 0x80, 0x00, 0x00]) => DeviceType::T4,
+                        Ok(const_sized) => DeviceType::UNKNOWN(i32::from_be_bytes(const_sized)),
+                        Err(err) => {
+                            eprint!("Could not decode LabJack device type: {}", err);
+                            DeviceType::UNKNOWN(0)
+                        }
+                    };
+
+                    let serial_number = match <[u8; 4]>::try_from(&buf[12..16]) {
+                        Ok(serial) => i32::from_be_bytes(serial),
+                        Err(error) => {
+                            eprint!("Could not decode LabJack serial number: {}", error);
+                            0
+                        }
+                    };
 
                     Some(Ok(LabJackDevice {
                         ip_address: addr.ip(),
                         port: addr.port(),
-                        device_type: DeviceType::ANY,
-                        connection_type: ConnectionType::ANY,
+                        device_type,
+                        serial_number,
                         max_bytes_per_megabyte: 0,
-                        serial_number: 0,
+                        // Only supports ethernet for now.
+                        connection_type: ConnectionType::ETHERNET,
                     }))
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
                 Err(error) => Some(Err(Error::Io(error))),
             }
-        })
-        .collect::<Result<Vec<_>, _>>()
+        }))
     }
 
     fn broadcast(duration: Duration) -> Result<UdpSocket, std::io::Error> {
-        let socket = UdpSocket::bind("0.0.0.0:0")?;
+        let socket = UdpSocket::bind(("0.0.0.0", 0))?;
+        println!("Listening through ephemeral: {}", socket.local_addr()?);
         socket.set_broadcast(true)?;
         socket.set_read_timeout(Some(duration))?;
         Ok(socket)
@@ -68,17 +94,26 @@ impl Discover {
 
 #[cfg(test)]
 mod test {
-    use crate::core::{
-        discover::FEEDBACK_FUNCTION,
-        modbus::{ModbusFeedbackFunction, TcpCompositor},
+    use crate::{
+        core::modbus::{ModbusFeedbackFunction, TcpCompositor},
+        prelude::translate,
     };
+
+    // Feedback Response:
+    //       Echo     Len  UID Fn      Data
+    //    +--------+  +--+  +  +   +-----------+
+    // => 0, 1, 0, 0, 0, 6, 1, 76, 64, 224, 0, 0
+    // Therefore, we recieve: [64, 224, 0, 0].
+    // That is: 0x40E00000 = 1088421888
+    // Which is the LabJack Product ID.
 
     #[test]
     fn feedback_function() {
         let mut transaction_id = 0;
         let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
+        let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
 
-        let read_product_id = ModbusFeedbackFunction::ReadRegisters(0xEA60, 2);
+        let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
         let (buf, _, _) = compositor
             .compose_feedback(&[read_product_id])
             .expect("Could not compose MBFB message");
@@ -90,7 +125,7 @@ mod test {
                 0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)
                 0x00, 0x06, // Length (6 bytes to follow)
                 0x01, // Unit Identifier (slave address, usually 1)
-                FEEDBACK_FUNCTION, // Function Code (Read Holding Registers)
+                0x4c, // Function Code (Read Holding Registers)
                 0x00, // Frame Type
                 0xEA, 0x60, // Starting Register (60,000 = T7 Product ID)
                 0x02, // Quantity of Registers (2)
