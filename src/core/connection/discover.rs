@@ -45,8 +45,10 @@ impl Discover {
             let mut buf = [0u8; 1024];
             match broadcast.recv_from(&mut buf) {
                 Ok((size, addr)) => {
-                    // 470033971 is 0x1C042633 is [28, 4, 38, 51]
                     debug!("Some LabJack Found! PacketSize={}, Addr={}", size, addr);
+                    
+                    // Device ID's taken from the LabJack UDP broadcast docs:
+                    // https://support.labjack.com/docs/protocol-details-direct-modbus-tcp?search=product%20id#ProtocolDetails%5BDirectModbusTCP%5D-ReadT-SeriesProductID(Searchnetworkforadevice) 
                     let device_type = match <[u8; 4]>::try_from(&buf[8..12]) {
                         Ok([0x41, 0x00, 0x00, 0x00]) => DeviceType::T8,
                         Ok([0x40, 0xE0, 0x00, 0x00]) => DeviceType::T7,
