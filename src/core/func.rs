@@ -1,5 +1,7 @@
+use crate::prelude::translate::LookupTable;
+
 #[repr(u32)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LabJackDataType {
     Uint16 = 0,
     Uint32 = 1,
@@ -19,9 +21,16 @@ impl LabJackDataType {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct LabJackEntity {
     pub address: u32,
     pub data_type: LabJackDataType,
+}
+
+impl Into<LabJackEntity> for LookupTable {
+    fn into(self) -> LabJackEntity {
+        self.raw()
+    }
 }
 
 impl LabJackEntity {

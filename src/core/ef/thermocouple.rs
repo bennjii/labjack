@@ -87,7 +87,7 @@ impl ThermocoupleType {
                 4.637791e-11,
                 -2.165394e-15,
                 6.048144e-20,
-                -7.293422e-25
+                -7.293422e-25,
             ],
         }
     }
@@ -105,7 +105,7 @@ impl ThermocoupleType {
                 -1.2536600e-15,
                 2.14892176e-18,
                 -1.4388042e-21,
-                3.59608995e-25
+                3.59608995e-25,
             ],
             ThermocoupleType::TypeJ => &[
                 0.0,
@@ -116,7 +116,7 @@ impl ThermocoupleType {
                 -1.7052958e-10,
                 2.09480907e-13,
                 -1.2538395e-16,
-                1.56317257e-20
+                1.56317257e-20,
             ],
             ThermocoupleType::TypeK => &[
                 -17.600413686,
@@ -128,7 +128,7 @@ impl ThermocoupleType {
                 5.6075059e-13,
                 -3.202072e-16,
                 9.7151147e-20,
-                -1.210472e-23
+                -1.210472e-23,
             ],
             ThermocoupleType::TypeR => &[
                 0.0,
@@ -140,7 +140,7 @@ impl ThermocoupleType {
                 5.007774410e-14,
                 -3.73105886e-17,
                 1.577164824e-20,
-                -2.81038625e-24
+                -2.81038625e-24,
             ],
             ThermocoupleType::TypeS => &[
                 0.0,
@@ -151,7 +151,7 @@ impl ThermocoupleType {
                 -3.314651964e-11,
                 2.557442518e-14,
                 -1.25068871e-17,
-                2.714431761e-21
+                2.714431761e-21,
             ],
             ThermocoupleType::TypeT => &[
                 0.0,
@@ -162,16 +162,17 @@ impl ThermocoupleType {
                 1.09968809e-8,
                 -3.0815759e-11,
                 4.54791353e-14,
-                -2.7512902e-17
+                -2.7512902e-17,
             ],
         }
     }
 }
 
 impl Thermocouple {
-    pub fn temp_from_volt(&self, volt: f64) -> f64 {
+    pub fn temp_from_volt(r#type: ThermocoupleType, volt: &f64) -> f64 {
         let as_microvolt = volt / 1e-6;
-        self.0.voltage_coefficients()
+        r#type
+            .voltage_coefficients()
             .iter()
             .enumerate()
             .fold(0.0, |accumulator, (index, coeff)| {
@@ -179,14 +180,15 @@ impl Thermocouple {
             })
     }
 
-    pub fn volt_from_temp(&self, temp: f64) -> f64 {
-        let microvolt = self.0.temperature_coefficients()
+    pub fn volt_from_temp(r#type: ThermocoupleType, temp: &f64) -> f64 {
+        let microvolt = r#type
+            .temperature_coefficients()
             .iter()
             .enumerate()
             .fold(0.0, |accumulator, (index, coeff)| {
                 accumulator + coeff * temp.powi(index as i32)
             });
-        
+
         microvolt * 1e-6
     }
 }
@@ -194,7 +196,7 @@ impl Thermocouple {
 #[cfg(test)]
 mod test {
     use crate::core::ef::thermocouple::*;
-    
+
     const CLOSE: f64 = 0.01;
     fn assert_close(value: f64, expected: f64) {
         assert!(value > expected - CLOSE && value < expected + CLOSE)
@@ -204,17 +206,17 @@ mod test {
     fn test_volt_to_temp() {
         // 1mV in Volts
         let voltage = 1.0e-3;
-        let temperature = Thermocouple(ThermocoupleType::TypeT).temp_from_volt(voltage);
-        
+        let temperature = Thermocouple::temp_from_volt(ThermocoupleType::TypeT, voltage);
+
         // Converts to 25.2120 degrees C
         assert_close(temperature, 25.2120);
     }
-    
+
     #[test]
     fn test_temp_to_volt() {
         let temperature = 25.2120;
-        let voltage = Thermocouple(ThermocoupleType::TypeT).volt_from_temp(temperature);
-        
+        let voltage = Thermocouple::volt_from_temp(ThermocoupleType::TypeT, temperature);
+
         // Verifies that the conversion is correct
         assert_close(voltage, 1.0e-3)
     }

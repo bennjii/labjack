@@ -1,7 +1,6 @@
-pub mod core;
-
 #[macro_use]
 extern crate enum_primitive;
+pub mod core;
 
 #[cfg(test)]
 pub mod test;
@@ -13,4 +12,5 @@ pub mod prelude {
 
     pub use crate::core::LabJack;
     pub use crate::core::*;
+    pub use translate::*;
 }
