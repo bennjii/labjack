@@ -7,7 +7,7 @@ fn main() {
     env_logger::init();
 
     let time = Instant::now();
-    let device = LabJack::connect_by_id(470033971).expect("Failed to connect to LabJack device");
+    let device = LabJack::connect_by_id(LabJackSerialNumber(470033971)).expect("Failed to connect to LabJack device");
 
     info!(
         "Connected to a device on {}:{}",

@@ -1,6 +1,18 @@
-use std::fmt::{Display, Formatter};
-
 use super::{ConnectionType, DeviceType};
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use serde::{Serialize, Deserialize};
+
+#[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+pub struct LabJackSerialNumber(pub i32);
+
+impl Deref for LabJackSerialNumber {
+    type Target = i32;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct LabJackDevice {
@@ -8,7 +20,7 @@ pub struct LabJackDevice {
     pub connection_type: ConnectionType,
     pub ip_address: std::net::IpAddr,
 
-    pub serial_number: i32,
+    pub serial_number: LabJackSerialNumber,
     pub port: u16,
 }
 
@@ -17,12 +29,8 @@ impl Display for LabJackDevice {
         // DT on CT @ 000.000.000:0000 => SERIAL_NUMBER
         write!(
             f,
-            "{} on {} @ {}:{} => {}",
-            self.device_type,
-            self.connection_type,
-            self.ip_address,
-            self.port,
-            self.serial_number
+            "{} on {} @ {}:{} => Serial({:?})",
+            self.device_type, self.connection_type, self.ip_address, self.port, self.serial_number
         )
     }
 }

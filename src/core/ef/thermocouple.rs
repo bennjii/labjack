@@ -1,7 +1,7 @@
 //! Conversions obtained from the NIST coefficients
 //! for thermocouples, seen [here](http://myweb.astate.edu/sharan/PMC/Labs/Measuring%20Temperature%20with%20Thermocouples.pdf).
 
-pub struct Thermocouple(ThermocoupleType);
+pub struct Thermocouple;
 
 pub enum ThermocoupleType {
     TypeE,

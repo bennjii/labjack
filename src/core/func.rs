@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+
 use crate::prelude::translate::LookupTable;
 
 #[repr(u32)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 pub enum LabJackDataType {
     Uint16 = 0,
     Uint32 = 1,
@@ -21,7 +23,7 @@ impl LabJackDataType {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct LabJackEntity {
     pub address: u32,
     pub data_type: LabJackDataType,

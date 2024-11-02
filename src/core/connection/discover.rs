@@ -14,7 +14,7 @@ use log::debug;
 use crate::{
     core::{
         modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
-        ConnectionType, DeviceType, LabJackDevice,
+        ConnectionType, DeviceType, LabJackDevice, LabJackSerialNumber,
     },
     prelude::translate,
 };
@@ -60,13 +60,15 @@ impl Discover {
                         }
                     };
 
-                    let serial_number = match <[u8; 4]>::try_from(&buf[12..16]) {
-                        Ok(serial) => i32::from_be_bytes(serial),
-                        Err(error) => {
-                            eprint!("Could not decode LabJack serial number: {}", error);
-                            0
+                    let serial_number = LabJackSerialNumber(
+                        match <[u8; 4]>::try_from(&buf[12..16]) {
+                            Ok(serial) => i32::from_be_bytes(serial),
+                            Err(error) => {
+                                eprint!("Could not decode LabJack serial number: {}", error);
+                                0
+                            }
                         }
-                    };
+                    );
 
                     Some(Ok(LabJackDevice {
                         ip_address: addr.ip(),

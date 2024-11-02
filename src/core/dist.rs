@@ -1,11 +1,11 @@
 use log::{debug, warn};
 
-use super::{discover::Discover, modbus::Error, DeviceType, LabJackDevice};
+use super::{discover::Discover, modbus::Error, DeviceType, LabJackDevice, LabJackSerialNumber};
 
 pub struct LabJack;
 
 impl LabJack {
-    pub fn connect(device_type: DeviceType, serial_number: i32) -> Result<LabJackDevice, Error> {
+    pub fn connect(device_type: DeviceType, serial_number: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
         let devices = Discover::search()?;
 
         devices
@@ -27,7 +27,7 @@ impl LabJack {
             .ok_or(Error::DeviceNotFound)
     }
 
-    pub fn connect_by_id(id: i32) -> Result<LabJackDevice, Error> {
+    pub fn connect_by_id(id: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
         LabJack::connect(DeviceType::ANY, id)
     }
 }
