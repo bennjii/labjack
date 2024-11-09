@@ -82,7 +82,12 @@ fn main() {
             .or_insert((opt1, opt2));
     }
 
-    writeln!(&mut file, "#[derive(Debug, PartialEq, Eq)]").unwrap();
+    writeln!(&mut file, "use serde::{{Deserialize, Serialize}};").unwrap();
+    writeln!(
+        &mut file,
+        "#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]"
+    )
+    .unwrap();
     writeln!(&mut file, "pub enum {} {{", LOOKUP_TABLE).unwrap();
     for (key, _) in map.clone() {
         writeln!(&mut file, "    {},", key).unwrap();
@@ -100,11 +105,13 @@ fn main() {
     for (key, (address, data_type)) in map {
         writeln!(
             &mut file,
-            "            {}::{} => crate::core::LabJackEntity::new({}, {}),",
+            "            {}::{} => crate::core::LabJackEntity::new({}, {}, {}::{}),",
             LOOKUP_TABLE,
             key,
             address.expect("Must have address"),
-            data_type.unwrap_or(0)
+            data_type.unwrap_or(0),
+            LOOKUP_TABLE,
+            key,
         )
         .unwrap();
     }

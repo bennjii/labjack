@@ -25,6 +25,8 @@ impl LabJackDataType {
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct LabJackEntity {
+    pub entry: LookupTable,
+
     pub address: u32,
     pub data_type: LabJackDataType,
 }
@@ -36,9 +38,10 @@ impl Into<LabJackEntity> for LookupTable {
 }
 
 impl LabJackEntity {
-    pub const fn new(address: u32, data_type: u32) -> LabJackEntity {
+    pub const fn new(address: u32, data_type: u32, entry: LookupTable) -> LabJackEntity {
         LabJackEntity {
             address,
+            entry,
             data_type: LabJackDataType::from_u32(data_type),
         }
     }
