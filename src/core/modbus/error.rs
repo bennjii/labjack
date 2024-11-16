@@ -40,7 +40,7 @@ pub enum Error {
     InvalidFunction,
     ParseCoilError,
     ParseInfoError,
-    DeviceNotFound
+    DeviceNotFound,
 }
 
 impl From<ExceptionCode> for Error {

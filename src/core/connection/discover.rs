@@ -33,7 +33,7 @@ impl Discover {
 
         let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
         let serial_number_addr = translate::LookupTable::SerialNumber.raw().address as u16;
-        
+
         let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
         let read_serial_number = ModbusFeedbackFunction::ReadRegisters(serial_number_addr, 2);
 
@@ -46,9 +46,9 @@ impl Discover {
             match broadcast.recv_from(&mut buf) {
                 Ok((size, addr)) => {
                     debug!("Some LabJack Found! PacketSize={}, Addr={}", size, addr);
-                    
+
                     // Device ID's taken from the LabJack UDP broadcast docs:
-                    // https://support.labjack.com/docs/protocol-details-direct-modbus-tcp?search=product%20id#ProtocolDetails%5BDirectModbusTCP%5D-ReadT-SeriesProductID(Searchnetworkforadevice) 
+                    // https://support.labjack.com/docs/protocol-details-direct-modbus-tcp?search=product%20id#ProtocolDetails%5BDirectModbusTCP%5D-ReadT-SeriesProductID(Searchnetworkforadevice)
                     let device_type = match <[u8; 4]>::try_from(&buf[8..12]) {
                         Ok([0x41, 0x00, 0x00, 0x00]) => DeviceType::T8,
                         Ok([0x40, 0xE0, 0x00, 0x00]) => DeviceType::T7,
@@ -60,15 +60,14 @@ impl Discover {
                         }
                     };
 
-                    let serial_number = LabJackSerialNumber(
-                        match <[u8; 4]>::try_from(&buf[12..16]) {
+                    let serial_number =
+                        LabJackSerialNumber(match <[u8; 4]>::try_from(&buf[12..16]) {
                             Ok(serial) => i32::from_be_bytes(serial),
                             Err(error) => {
                                 eprint!("Could not decode LabJack serial number: {}", error);
                                 0
                             }
-                        }
-                    );
+                        });
 
                     Some(Ok(LabJackDevice {
                         ip_address: addr.ip(),

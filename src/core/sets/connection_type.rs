@@ -28,7 +28,7 @@ impl Display for ConnectionType {
             ConnectionType::ETHERNET => "ETHERNET",
             ConnectionType::ANY | ConnectionType::UNKNOWN(_) => "ANY",
         }
-            .to_string();
+        .to_string();
         write!(f, "{}", str)
     }
 }

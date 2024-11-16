@@ -3,8 +3,8 @@ pub mod device;
 pub mod dist;
 pub mod ef;
 pub mod func;
-pub mod sets;
 pub mod modbus;
+pub mod sets;
 
 pub use connection::*;
 pub use device::*;

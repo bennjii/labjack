@@ -1,7 +1,7 @@
 use super::{ConnectionType, DeviceType};
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
-use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 pub struct LabJackSerialNumber(pub i32);

@@ -4,7 +4,7 @@ pub type Value = u16;
 
 pub enum ModbusFeedbackFunction<'a> {
     ReadRegisters(Address, u8),
-    WriteRegisters(Address, &'a [u8])
+    WriteRegisters(Address, &'a [u8]),
 }
 
 pub enum Function<'a> {
@@ -14,7 +14,7 @@ pub enum Function<'a> {
     WriteRegister(Address, Value),
     WriteRegisters(Address, Quantity, &'a [u8]),
 
-    // Feedback can 
+    // Feedback can
     Feedback(&'a [ModbusFeedbackFunction<'a>]),
 }
 

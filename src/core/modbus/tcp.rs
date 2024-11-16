@@ -77,27 +77,39 @@ impl TcpTransport {
         }
     }
 
-    fn validate_response_code(req: &[u8], resp: &[u8]) -> Result<(), Error> {
-        if req[7] + 0x80 == resp[7] {
-            match ExceptionCode::from_u8(resp[8]) {
-                Some(code) => Err(Error::Exception(code)),
-                None => Err(Error::InvalidResponse),
+    fn validate_response_code(req: &[u8], res: &[u8]) -> Result<(), Error> {
+        let req_code = *req.get(7).ok_or(Error::InvalidResponse)?;
+        let res_code = *res.get(7).ok_or(Error::InvalidResponse)?;
+
+        match res_code {
+            code if code == req_code + 0x80 => {
+                let exception = *res.get(8).ok_or(Error::InvalidResponse)?;
+                match ExceptionCode::from_u8(exception) {
+                    Some(code) => Err(Error::Exception(code)),
+                    None => Err(Error::InvalidResponse),
+                }
             }
-        } else if req[7] == resp[7] {
-            Ok(())
-        } else {
-            Err(Error::InvalidResponse)
+            code if code == req_code => Ok(()),
+            _ => Err(Error::InvalidResponse),
         }
     }
 
     fn get_reply_data(reply: &[u8], expected_bytes: usize) -> Result<&[u8], Error> {
-        if reply[8] as usize != expected_bytes
-            || reply.len() != MODBUS_HEADER_SIZE + expected_bytes + 2
-        {
-            Err(Error::InvalidData(Reason::UnexpectedReplySize))
-        } else {
-            Ok(&reply[MODBUS_HEADER_SIZE + 2..])
+        let given_response_length = *reply
+            .get(8)
+            .ok_or(Error::InvalidData(Reason::UnexpectedReplySize))?
+            as usize;
+        let reply_length_does_not_match = reply.len() != MODBUS_HEADER_SIZE + expected_bytes + 2;
+
+        if given_response_length != expected_bytes || reply_length_does_not_match {
+            return Err(Error::InvalidData(Reason::UnexpectedReplySize));
         }
+
+        let reply_data = reply
+            .get(MODBUS_HEADER_SIZE + 2..)
+            .ok_or(Error::InvalidData(Reason::UnexpectedReplySize))?;
+
+        Ok(reply_data)
     }
 
     pub fn close(&mut self) -> Result<(), Error> {
@@ -171,7 +183,7 @@ impl<'a> TcpCompositor<'a> {
         fns: &[ModbusFeedbackFunction],
     ) -> Result<(Vec<u8>, Header, usize), Error> {
         let mut read_return_size = 0;
-        
+
         // Must account for unit ID and function ID (2 bytes) + base header size
         let composed_size = fns.iter().fold(MODBUS_HEADER_SIZE + 2, |acc, f| match f {
             ModbusFeedbackFunction::ReadRegisters(_, _) => {
@@ -213,22 +225,19 @@ impl Transport for TcpTransport {
 
     fn read(&mut self, function: &super::Function) -> Result<Box<[u8]>, Self::Error> {
         let (buf, header, expected_bytes) = self.compositor().compose_read(function)?;
+        let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
 
-        match self.stream.write_all(&buf) {
-            Ok(_s) => {
-                let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
-                match self.stream.read(&mut reply) {
-                    Ok(_s) => {
-                        let resp_hd = Header::unpack(&reply[..MODBUS_HEADER_SIZE])?;
-                        TcpTransport::validate_response_header(&header, &resp_hd)?;
-                        TcpTransport::validate_response_code(&buf, &reply)?;
-                        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
-                    }
-                    Err(e) => Err(Error::Io(e)),
-                }
-            }
-            Err(e) => Err(Error::Io(e)),
-        }
+        self.stream.write_all(&buf).map_err(Error::Io)?;
+        self.stream.read(&mut reply).map_err(Error::Io)?;
+
+        let reply_header_raw = &reply
+            .get(..MODBUS_HEADER_SIZE)
+            .ok_or(Error::InvalidResponse)?;
+        let resp_hd = Header::unpack(reply_header_raw)?;
+
+        TcpTransport::validate_response_header(&header, &resp_hd)?;
+        TcpTransport::validate_response_code(&buf, &reply)?;
+        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
     }
 
     fn write(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {

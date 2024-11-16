@@ -31,9 +31,9 @@ pub struct LabJackEntity {
     pub data_type: LabJackDataType,
 }
 
-impl Into<LabJackEntity> for LookupTable {
-    fn into(self) -> LabJackEntity {
-        self.raw()
+impl From<LookupTable> for LabJackEntity {
+    fn from(val: LookupTable) -> Self {
+        val.raw()
     }
 }
 

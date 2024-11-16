@@ -7,12 +7,20 @@ pub const MODBUS_HEADER_SIZE: usize = 7;
 pub const MODBUS_MAX_PACKET_SIZE: usize = 260;
 
 pub trait Client: Transport {
-    fn read_holding_registers(&mut self, addr: Address, quant: Quantity) -> Result<Vec<Value>, Self::Error> {
+    fn read_holding_registers(
+        &mut self,
+        addr: Address,
+        quant: Quantity,
+    ) -> Result<Vec<Value>, Self::Error> {
         let bytes = self.read(&Function::ReadHoldingRegisters(addr, quant))?;
         binary::pack_bytes(&bytes[..]).map_err(Self::Error::from)
     }
 
-    fn read_input_registers(&mut self, addr: Address, quant: Quantity) -> Result<Vec<Value>, Self::Error> {
+    fn read_input_registers(
+        &mut self,
+        addr: Address,
+        quant: Quantity,
+    ) -> Result<Vec<Value>, Self::Error> {
         let bytes = self.read(&Function::ReadInputRegisters(addr, quant))?;
         binary::pack_bytes(&bytes[..]).map_err(Self::Error::from)
     }
@@ -45,10 +53,10 @@ pub trait Client: Transport {
     fn feedback(&mut self, fns: &[ModbusFeedbackFunction]) -> Result<(), Self::Error> {
         let mut buff = vec![0; MODBUS_HEADER_SIZE];
         buff.write_u8(Function::Feedback(fns).code())?;
-        
+
         for frame in fns {
             buff.write_u8(frame.code())?;
-            
+
             match frame {
                 ModbusFeedbackFunction::ReadRegisters(addr, quant) => {
                     buff.write_u16::<BigEndian>(*addr)?;
@@ -63,7 +71,7 @@ pub trait Client: Transport {
                 }
             }
         }
-        
+
         self.write(&mut buff)
     }
 }

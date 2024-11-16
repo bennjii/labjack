@@ -5,7 +5,10 @@ use super::{discover::Discover, modbus::Error, DeviceType, LabJackDevice, LabJac
 pub struct LabJack;
 
 impl LabJack {
-    pub fn connect(device_type: DeviceType, serial_number: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
+    pub fn connect(
+        device_type: DeviceType,
+        serial_number: LabJackSerialNumber,
+    ) -> Result<LabJackDevice, Error> {
         let devices = Discover::search()?;
 
         devices

@@ -1,5 +1,8 @@
+#![allow(clippy::all)]
+
 use std::collections::HashMap;
 use std::env;
+use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
@@ -25,14 +28,15 @@ fn to_camel_case(input: &str) -> String {
     result
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Path to the C header file
     let header_path = "./resources/LabJackMModbusMap.h";
-    let path = Path::new(&env::var("OUT_DIR").unwrap()).join("codegen.rs");
-    let mut file = BufWriter::new(File::create(&path).unwrap());
+    let out_dir = &env::var("OUT_DIR")?;
+    let path = Path::new(out_dir).join("codegen.rs");
+    let mut file = BufWriter::new(File::create(&path)?);
 
     // Open the C header file for reading
-    let header_file = File::open(header_path).expect("Cannot open header file");
+    let header_file = File::open(header_path)?;
     let reader = BufReader::new(header_file);
 
     let lines: Vec<(String, (Option<u32>, Option<u32>))> = reader
@@ -108,7 +112,7 @@ fn main() {
             "            {}::{} => crate::core::LabJackEntity::new({}, {}, {}::{}),",
             LOOKUP_TABLE,
             key,
-            address.expect("Must have address"),
+            address.ok_or("Could not decode given labjack address")?,
             data_type.unwrap_or(0),
             LOOKUP_TABLE,
             key,
@@ -118,4 +122,6 @@ fn main() {
     writeln!(&mut file, "         }}",).unwrap();
     writeln!(&mut file, "    }}",).unwrap();
     writeln!(&mut file, "}}",).unwrap();
+
+    Ok(())
 }
