@@ -46,7 +46,3 @@ impl LabJackEntity {
         }
     }
 }
-
-pub trait LabJackFunctionality {
-    fn read(&self, item: LabJackEntity) -> f64;
-}

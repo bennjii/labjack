@@ -206,7 +206,7 @@ mod test {
     fn test_volt_to_temp() {
         // 1mV in Volts
         let voltage = 1.0e-3;
-        let temperature = Thermocouple::temp_from_volt(ThermocoupleType::TypeT, voltage);
+        let temperature = Thermocouple::temp_from_volt(ThermocoupleType::TypeT, &voltage);
 
         // Converts to 25.2120 degrees C
         assert_close(temperature, 25.2120);
@@ -215,7 +215,7 @@ mod test {
     #[test]
     fn test_temp_to_volt() {
         let temperature = 25.2120;
-        let voltage = Thermocouple::volt_from_temp(ThermocoupleType::TypeT, temperature);
+        let voltage = Thermocouple::volt_from_temp(ThermocoupleType::TypeT, &temperature);
 
         // Verifies that the conversion is correct
         assert_close(voltage, 1.0e-3)
