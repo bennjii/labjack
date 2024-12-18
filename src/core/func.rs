@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 
 use crate::prelude::translate::LookupTable;
@@ -44,5 +46,11 @@ impl LabJackEntity {
             entry,
             data_type: LabJackDataType::from_u32(data_type),
         }
+    }
+}
+
+impl Display for LabJackEntity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.entry)
     }
 }
