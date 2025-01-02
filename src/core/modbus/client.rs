@@ -12,7 +12,7 @@ pub trait Client: Transport {
         addr: Address,
         quant: Quantity,
     ) -> Result<Vec<Value>, Self::Error> {
-        let bytes = self.read(&Function::ReadHoldingRegisters(addr, quant))?;
+        let bytes = self.read(&ReadFunction::HoldingRegisters(addr, quant))?;
         binary::pack_bytes(&bytes[..]).map_err(Self::Error::from)
     }
 
@@ -21,13 +21,13 @@ pub trait Client: Transport {
         addr: Address,
         quant: Quantity,
     ) -> Result<Vec<Value>, Self::Error> {
-        let bytes = self.read(&Function::ReadInputRegisters(addr, quant))?;
+        let bytes = self.read(&ReadFunction::InputRegisters(addr, quant))?;
         binary::pack_bytes(&bytes[..]).map_err(Self::Error::from)
     }
 
     fn write_register(&mut self, addr: Address, value: Value) -> Result<(), Self::Error> {
         let mut buff = vec![0; MODBUS_HEADER_SIZE]; // Header gets filled in later
-        buff.write_u8(Function::WriteRegister(addr, value).code())?;
+        buff.write_u8(WriteFunction::SingleRegister(addr, value).code())?;
         buff.write_u16::<BigEndian>(addr)?;
         buff.write_u16::<BigEndian>(value)?;
         self.write(&mut buff)
@@ -38,7 +38,7 @@ pub trait Client: Transport {
         let quantity = values.len() as Value;
 
         let mut buff = vec![0; MODBUS_HEADER_SIZE]; // Header gets filled in later
-        buff.write_u8(Function::WriteRegisters(addr, quantity, &bytes).code())?;
+        buff.write_u8(WriteFunction::MultipleRegisters(addr, quantity, &bytes).code())?;
         buff.write_u16::<BigEndian>(addr)?;
         buff.write_u16::<BigEndian>(quantity)?;
         buff.write_u8(bytes.len() as u8)?;
@@ -75,3 +75,5 @@ pub trait Client: Transport {
         self.write(&mut buff)
     }
 }
+
+impl<T> Client for T where T: Transport {}

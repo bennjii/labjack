@@ -28,7 +28,14 @@ pub enum Reason {
     DecodingError,
     EncodingError,
     InvalidByteorder,
+    RegisterMismatch,
     Custom(String),
+}
+
+impl From<Reason> for Error {
+    fn from(reason: Reason) -> Error {
+        Error::InvalidData(reason)
+    }
 }
 
 #[derive(Debug)]

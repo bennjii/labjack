@@ -3,69 +3,72 @@ use std::{
     io::{self, Read, Write},
     net::{Shutdown, TcpStream},
 };
-
+use std::collections::HashSet;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use enum_primitive::FromPrimitive;
-
+use crate::prelude::modbus::ReadFunction;
 use super::{
-    Client, Error, ExceptionCode, Function, ModbusFeedbackFunction, Reason, Transport,
-    MODBUS_HEADER_SIZE, MODBUS_MAX_PACKET_SIZE, MODBUS_PROTOCOL_TCP,
+    Error, ExceptionCode, Function, ModbusFeedbackFunction, Reason, Transport, MODBUS_HEADER_SIZE,
+    MODBUS_MAX_PACKET_SIZE, MODBUS_PROTOCOL_TCP,
 };
 
+/// As referenced in the LabJack manual fields documentation for ModBus messages,
+/// the UnitID field is not used (as bridging is not used). Therefore, the default
+/// value is suggested to be the u8 literal, 1. Alternatively, `0b00000001`.
+///
+/// Referenced Documentation: [LabJack Modbus Protocol Details: Fields](https://support.labjack.com/docs/protocol-details-direct-modbus-tcp#ProtocolDetails[DirectModbusTCP]-Fields).
+const BASE_UNIT_ID: u8 = 1;
+
+/// The base transaction ID. We use this value to identify a unique transaction,
+/// such that the LabJack will relay this value back to us.
+///
+/// We have [`u16::MAX`] (or 65535) values. The use of values is implementation-dependent
+/// but often uses a cycle to perform a checked addition to the existing transaction id
+/// for each new message.
+///
+/// Referenced Documentation: [LabJack Modbus Protocol Details: Fields](https://support.labjack.com/docs/protocol-details-direct-modbus-tcp#ProtocolDetails[DirectModbusTCP]-Fields).
+const STARTING_TRANSACTION_ID: u16 = 1;
+
+/// Ephemeral structure created from the transport to compose messages. It's internal state is
+/// only of a mutable extension of the [`TcpTransport`] explicitly only containing domain-specific
+/// information with an emphasis on which properties can be mutated in the base transport.
+///
+/// It is used to compose messages for use over modbus.
 pub struct TcpCompositor<'a> {
     transaction_id: &'a mut u16,
     unit_id: u8,
 }
 
+// TODO: Redo the responsibilities of the transaction id here...
+
 pub struct TcpTransport {
-    tid: u16,
-    uid: u8,
-    stream: TcpStream,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Header {
     transaction_id: u16,
-    protocol_id: u16,
-    length: u16,
     unit_id: u8,
-}
+    stream: TcpStream,
 
-impl Header {
-    fn new(transport: &mut TcpCompositor, len: u16) -> Header {
-        Header {
-            transaction_id: *transport.new_tid(),
-            protocol_id: MODBUS_PROTOCOL_TCP,
-            length: len - MODBUS_HEADER_SIZE as u16,
-            unit_id: transport.unit_id,
-        }
-    }
-
-    fn pack(&self) -> Result<Vec<u8>, Error> {
-        let mut buff = vec![];
-        buff.write_u16::<BigEndian>(self.transaction_id)?;
-        buff.write_u16::<BigEndian>(self.protocol_id)?;
-        buff.write_u16::<BigEndian>(self.length)?;
-        buff.write_u8(self.unit_id)?;
-        Ok(buff)
-    }
-
-    fn unpack(buff: &[u8]) -> Result<Header, Error> {
-        let mut rdr = io::Cursor::new(buff);
-        Ok(Header {
-            transaction_id: rdr.read_u16::<BigEndian>()?,
-            protocol_id: rdr.read_u16::<BigEndian>()?,
-            length: rdr.read_u16::<BigEndian>()?,
-            unit_id: rdr.read_u8()?,
-        })
-    }
+    /// A hashset of existing transactions to indicate which values
+    /// the transaction_id can take. When it's length is equal to
+    /// [`u16::MAX`], no more transactions can be made. It is key
+    /// that upon the completion of a transaction, it's identifier
+    /// is removed from this set.
+    existing_transactions: HashSet<u16>
 }
 
 impl TcpTransport {
+    pub fn new(stream: TcpStream) -> TcpTransport {
+        TcpTransport {
+            unit_id: BASE_UNIT_ID,
+            transaction_id: STARTING_TRANSACTION_ID,
+
+            stream,
+            existing_transactions: HashSet::new()
+        }
+    }
+
     fn compositor(&mut self) -> TcpCompositor {
         TcpCompositor {
-            transaction_id: &mut self.tid,
-            unit_id: self.uid,
+            transaction_id: &mut self.transaction_id,
+            unit_id: self.unit_id,
         }
     }
 
@@ -117,6 +120,44 @@ impl TcpTransport {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct Header {
+    transaction_id: u16,
+    protocol_id: u16,
+    length: u16,
+    unit_id: u8,
+}
+
+impl Header {
+    fn new(transport: &mut TcpCompositor, len: u16) -> Header {
+        Header {
+            transaction_id: *transport.new_tid(),
+            protocol_id: MODBUS_PROTOCOL_TCP,
+            length: len - MODBUS_HEADER_SIZE as u16,
+            unit_id: transport.unit_id,
+        }
+    }
+
+    fn pack(&self) -> Result<Vec<u8>, Error> {
+        let mut buff = vec![];
+        buff.write_u16::<BigEndian>(self.transaction_id)?;
+        buff.write_u16::<BigEndian>(self.protocol_id)?;
+        buff.write_u16::<BigEndian>(self.length)?;
+        buff.write_u8(self.unit_id)?;
+        Ok(buff)
+    }
+
+    fn unpack(buff: &[u8]) -> Result<Header, Error> {
+        let mut rdr = io::Cursor::new(buff);
+        Ok(Header {
+            transaction_id: rdr.read_u16::<BigEndian>()?,
+            protocol_id: rdr.read_u16::<BigEndian>()?,
+            length: rdr.read_u16::<BigEndian>()?,
+            unit_id: rdr.read_u8()?,
+        })
+    }
+}
+
 impl<'a> TcpCompositor<'a> {
     pub fn new(transaction_id: &'a mut u16, unit_id: u8) -> TcpCompositor<'a> {
         TcpCompositor {
@@ -130,12 +171,12 @@ impl<'a> TcpCompositor<'a> {
         self.transaction_id
     }
 
-    pub fn compose_read(&mut self, function: &Function) -> Result<(Vec<u8>, Header, usize), Error> {
+    pub fn compose_read(&mut self, function: &ReadFunction) -> Result<(Vec<u8>, Header, usize), Error> {
         let (addr, count, expected_bytes) = match *function {
-            Function::ReadHoldingRegisters(a, c) | Function::ReadInputRegisters(a, c) => {
+            ReadFunction::HoldingRegisters(a, c)
+            | ReadFunction::InputRegisters(a, c) => {
                 (a, c, 2 * c as usize)
             }
-            _ => return Err(Error::InvalidFunction),
         };
 
         if count < 1 {
@@ -221,24 +262,7 @@ impl<'a> TcpCompositor<'a> {
 }
 
 impl Transport for TcpTransport {
-    type Error = crate::prelude::modbus::Error;
-
-    fn read(&mut self, function: &super::Function) -> Result<Box<[u8]>, Self::Error> {
-        let (buf, header, expected_bytes) = self.compositor().compose_read(function)?;
-        let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
-
-        self.stream.write_all(&buf).map_err(Error::Io)?;
-        self.stream.read(&mut reply).map_err(Error::Io)?;
-
-        let reply_header_raw = &reply
-            .get(..MODBUS_HEADER_SIZE)
-            .ok_or(Error::InvalidResponse)?;
-        let resp_hd = Header::unpack(reply_header_raw)?;
-
-        TcpTransport::validate_response_header(&header, &resp_hd)?;
-        TcpTransport::validate_response_code(&buf, &reply)?;
-        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
-    }
+    type Error = Error;
 
     fn write(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
         let (buf, header) = self.compositor().compose_write(buf)?;
@@ -258,6 +282,21 @@ impl Transport for TcpTransport {
             Err(e) => Err(Error::Io(e)),
         }
     }
-}
 
-impl Client for TcpTransport {}
+    fn read(&mut self, function: &super::ReadFunction) -> Result<Box<[u8]>, Self::Error> {
+        let (buf, header, expected_bytes) = self.compositor().compose_read(function)?;
+        let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
+
+        self.stream.write_all(&buf).map_err(Error::Io)?;
+        self.stream.read(&mut reply).map_err(Error::Io)?;
+
+        let reply_header_raw = &reply
+            .get(..MODBUS_HEADER_SIZE)
+            .ok_or(Error::InvalidResponse)?;
+        let resp_hd = Header::unpack(reply_header_raw)?;
+
+        TcpTransport::validate_response_header(&header, &resp_hd)?;
+        TcpTransport::validate_response_code(&buf, &reply)?;
+        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
+    }
+}

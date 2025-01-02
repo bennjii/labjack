@@ -1,5 +1,6 @@
 use log::{debug, warn};
-
+use crate::prelude::client::client::LabJackClient;
+use crate::prelude::modbus::TcpTransport;
 use super::{discover::Discover, modbus::Error, DeviceType, LabJackDevice, LabJackSerialNumber};
 
 pub struct LabJack;
@@ -32,5 +33,14 @@ impl LabJack {
 
     pub fn connect_by_id(id: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
         LabJack::connect(DeviceType::ANY, id)
+    }
+
+    ///
+    /// connect::<Tcp>() style-?
+    /// where Tcp: Connect
+    /// so we have: fn connect<T>(serial) -> Result<Client, ...> where T: Connect { ... }
+    /// or realistically; Transport*ABLE*.
+    pub fn tcp_by_id(id: LabJackSerialNumber) -> Result<LabJackClient<TcpTransport>, Error> {
+        Ok(LabJackClient::new(LabJack::connect_by_id(id)?)?)
     }
 }

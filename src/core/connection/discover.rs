@@ -19,8 +19,9 @@ use crate::{
     prelude::translate,
 };
 
-const BROADCAST_IP: &str = "192.168.255.255";
-const MODBUS_FEEDBACK_PORT: u16 = 52362;
+pub const BROADCAST_IP: &str = "192.168.255.255";
+pub const MODBUS_FEEDBACK_PORT: u16 = 52362;
+pub const MODBUS_COMMUNICATION_PORT: u16 = 502;
 
 pub struct Discover;
 
@@ -111,19 +112,22 @@ mod test {
 
     #[test]
     fn feedback_function() {
-        let mut transaction_id = 0;
+        let mut transaction_id: u16 = 0;
         let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
         let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
 
         let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
         let (buf, _, _) = compositor
             .compose_feedback(&[read_product_id])
-            .expect("Could not compose MBFB message");
+            .expect("Could not compose ModbusFeedback message");
 
+        let as_be = transaction_id.to_be_bytes();
+
+        // Transaction Identifier (arbitrary)
+        assert_eq!(buf[0..2], as_be[..]);
         assert_eq!(
-            buf,
+            buf[2..],
             vec![
-                0x00, 0x01, // Transaction Identifier (arbitrary)
                 0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)
                 0x00, 0x06, // Length (6 bytes to follow)
                 0x01, // Unit Identifier (slave address, usually 1)

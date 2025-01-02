@@ -1,9 +1,9 @@
 //! Conversions obtained from the NIST coefficients
 //! for thermocouples, seen [here](http://myweb.astate.edu/sharan/PMC/Labs/Measuring%20Temperature%20with%20Thermocouples.pdf).
 
-pub struct Thermocouple;
+use crate::core::{adc::Adc, dac::Dac};
 
-pub enum ThermocoupleType {
+pub enum Thermocouple {
     TypeE,
     TypeJ,
     TypeK,
@@ -12,11 +12,11 @@ pub enum ThermocoupleType {
     TypeT,
 }
 
-impl ThermocoupleType {
+impl Thermocouple {
     pub(crate) const fn voltage_coefficients(&self) -> &'static [f64] {
         match self {
             // Error +/- 0.02 degrees C
-            ThermocoupleType::TypeE => &[
+            Thermocouple::TypeE => &[
                 0.0,
                 1.7056035e-2,
                 -2.330179e-7,
@@ -29,7 +29,7 @@ impl ThermocoupleType {
                 -3.2447087e-41,
             ],
             // Error +/- 0.05 degrees C
-            ThermocoupleType::TypeJ => &[
+            Thermocouple::TypeJ => &[
                 0.0,
                 1.978425e-2,
                 -2.001204e-7,
@@ -40,7 +40,7 @@ impl ThermocoupleType {
                 5.099890e-31,
             ],
             // Error +/- 0.05 degrees C
-            ThermocoupleType::TypeK => &[
+            Thermocouple::TypeK => &[
                 0.0,
                 2.508355e-2,
                 7.860106e-8,
@@ -53,7 +53,7 @@ impl ThermocoupleType {
                 -1.052755e-35,
             ],
             // Error +/- 0.02 degrees C
-            ThermocoupleType::TypeR => &[
+            Thermocouple::TypeR => &[
                 0.0,
                 1.8891380e-1,
                 -9.3835290e-5,
@@ -67,7 +67,7 @@ impl ThermocoupleType {
                 -3.3187769e-30,
             ],
             // Error +/- 0.02 degrees C
-            ThermocoupleType::TypeS => &[
+            Thermocouple::TypeS => &[
                 0.0,
                 1.84949460e-1,
                 -8.00504062e-5,
@@ -80,7 +80,7 @@ impl ThermocoupleType {
                 2.79786260e-27,
             ],
             // Error +/- 0.03 degrees C
-            ThermocoupleType::TypeT => &[
+            Thermocouple::TypeT => &[
                 0.0,
                 2.592800e-2,
                 -7.602961e-7,
@@ -94,7 +94,7 @@ impl ThermocoupleType {
 
     pub(crate) const fn temperature_coefficients(&self) -> &[f64] {
         match self {
-            ThermocoupleType::TypeE => &[
+            Thermocouple::TypeE => &[
                 0.0,
                 58.665508710,
                 4.503227558e-2,
@@ -107,7 +107,7 @@ impl ThermocoupleType {
                 -1.4388042e-21,
                 3.59608995e-25,
             ],
-            ThermocoupleType::TypeJ => &[
+            Thermocouple::TypeJ => &[
                 0.0,
                 50.38118782,
                 3.047583693e-2,
@@ -118,7 +118,7 @@ impl ThermocoupleType {
                 -1.2538395e-16,
                 1.56317257e-20,
             ],
-            ThermocoupleType::TypeK => &[
+            Thermocouple::TypeK => &[
                 -17.600413686,
                 38.921204975,
                 1.85587700e-2,
@@ -130,7 +130,7 @@ impl ThermocoupleType {
                 9.7151147e-20,
                 -1.210472e-23,
             ],
-            ThermocoupleType::TypeR => &[
+            Thermocouple::TypeR => &[
                 0.0,
                 5.28961729765,
                 1.3916658978e-2,
@@ -142,7 +142,7 @@ impl ThermocoupleType {
                 1.577164824e-20,
                 -2.81038625e-24,
             ],
-            ThermocoupleType::TypeS => &[
+            Thermocouple::TypeS => &[
                 0.0,
                 5.40313308631,
                 1.2593428974e-2,
@@ -153,7 +153,7 @@ impl ThermocoupleType {
                 -1.25068871e-17,
                 2.714431761e-21,
             ],
-            ThermocoupleType::TypeT => &[
+            Thermocouple::TypeT => &[
                 0.0,
                 38.748106364,
                 3.32922279e-2,
@@ -169,9 +169,9 @@ impl ThermocoupleType {
 }
 
 impl Thermocouple {
-    pub fn temp_from_volt(r#type: ThermocoupleType, volt: &f64) -> f64 {
+    pub fn temp_from_volt(&self, volt: &f64) -> f64 {
         let as_microvolt = volt / 1e-6;
-        r#type
+        self
             .voltage_coefficients()
             .iter()
             .enumerate()
@@ -180,8 +180,8 @@ impl Thermocouple {
             })
     }
 
-    pub fn volt_from_temp(r#type: ThermocoupleType, temp: &f64) -> f64 {
-        let microvolt = r#type
+    pub fn volt_from_temp(&self, temp: &f64) -> f64 {
+        let microvolt = self
             .temperature_coefficients()
             .iter()
             .enumerate()
@@ -190,6 +190,24 @@ impl Thermocouple {
             });
 
         microvolt * 1e-6
+    }
+}
+
+impl Adc for Thermocouple {
+    type Digital = f64;
+    type Voltage<'a> = f64;
+
+    fn to_digital(&self, voltage: Self::Voltage<'_>) -> Self::Digital {
+        self.temp_from_volt(&voltage)
+    }
+}
+
+impl Dac for Thermocouple {
+    type Digital<'a> = &'a f64;
+    type Voltage<'a> = f64;
+
+    fn to_voltage(&self, digital: Self::Digital<'_>) -> Self::Voltage<'_> {
+        self.volt_from_temp(digital)
     }
 }
 
@@ -206,7 +224,7 @@ mod test {
     fn test_volt_to_temp() {
         // 1mV in Volts
         let voltage = 1.0e-3;
-        let temperature = Thermocouple::temp_from_volt(ThermocoupleType::TypeT, &voltage);
+        let temperature = Thermocouple::TypeT.temp_from_volt(&voltage);
 
         // Converts to 25.2120 degrees C
         assert_close(temperature, 25.2120);
@@ -215,7 +233,7 @@ mod test {
     #[test]
     fn test_temp_to_volt() {
         let temperature = 25.2120;
-        let voltage = Thermocouple::volt_from_temp(ThermocoupleType::TypeT, &temperature);
+        let voltage = Thermocouple::TypeT.volt_from_temp(&temperature);
 
         // Verifies that the conversion is correct
         assert_close(voltage, 1.0e-3)

@@ -1,7 +1,7 @@
 use std::time::Instant;
-
-use labjack::core::LabJack;
 use log::info;
+
+use labjack::prelude::*;
 
 fn main() {
     env_logger::init();
@@ -12,7 +12,7 @@ fn main() {
 
     info!(
         "Connected to a device on {}:{}",
-        device.ip_address, device.port
+        device.device.ip_address, device.device.port
     );
     info!("Took: {}ms", time.elapsed().as_millis());
 }
