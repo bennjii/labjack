@@ -1,21 +1,22 @@
 use log::{debug, warn};
 use crate::prelude::client::client::LabJackClient;
+use crate::prelude::connect::Connect;
 use crate::prelude::modbus::TcpTransport;
-use super::{discover::Discover, modbus::Error, DeviceType, LabJackDevice, LabJackSerialNumber};
+use super::{discover::Discover, modbus::Error, DeviceType, LabJackDevice, LabJackSerialNumber, EMULATED_DEVICE_SERIAL_NUMBER};
 
 pub struct LabJack;
 
 impl LabJack {
-    pub fn connect(
+    pub fn discover(
         device_type: DeviceType,
         serial_number: LabJackSerialNumber,
     ) -> Result<LabJackDevice, Error> {
-        let devices = Discover::search()?;
+        let devices = Discover::search_all()?;
 
         devices
             .filter_map(|device| match device {
                 Err(error) => {
-                    warn!("Failure retriving device, {:?}", error);
+                    warn!("Failure retrieving device, {:?}", error);
                     None
                 }
                 Ok(device) if device.device_type == device_type || device.device_type == DeviceType::ANY => Some(device),
@@ -31,16 +32,18 @@ impl LabJack {
             .ok_or(Error::DeviceNotFound)
     }
 
-    pub fn connect_by_id(id: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
-        LabJack::connect(DeviceType::ANY, id)
+    pub fn discover_with_id(id: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
+        if id.is_emulated() {
+            return Ok(LabJackDevice::emulated())
+        }
+
+        LabJack::discover(DeviceType::ANY, id)
     }
 
-    ///
-    /// connect::<Tcp>() style-?
-    /// where Tcp: Connect
-    /// so we have: fn connect<T>(serial) -> Result<Client, ...> where T: Connect { ... }
-    /// or realistically; Transport*ABLE*.
-    pub fn tcp_by_id(id: LabJackSerialNumber) -> Result<LabJackClient<TcpTransport>, Error> {
-        Ok(LabJackClient::new(LabJack::connect_by_id(id)?)?)
+    pub fn connect<T>(id: LabJackSerialNumber) -> Result<LabJackClient<<T as Connect>::Transport>, Error> where T: Connect {
+        let device = LabJack::discover_with_id(id)?;
+        let transport = T::forge(device)?;
+
+        Ok(LabJackClient::new(device, transport))
     }
 }

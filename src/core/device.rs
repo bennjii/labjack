@@ -1,12 +1,11 @@
 use super::{ConnectionType, DeviceType, LabJackDataValue};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Deref;
-use crate::core::discover::MODBUS_COMMUNICATION_PORT;
-use crate::prelude::modbus::{Error, TcpTransport};
+use crate::prelude::discover::MODBUS_COMMUNICATION_PORT;
 
-const EMULATED_DEVICE_SERIAL_NUMBER: i32 = -2;
+pub const EMULATED_DEVICE_SERIAL_NUMBER: i32 = -2;
 
 #[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 pub struct LabJackSerialNumber(pub i32);
@@ -51,14 +50,14 @@ impl Display for LabJackDevice {
 }
 
 impl LabJackDevice {
-    pub fn transport(&self) -> Result<TcpTransport, Error> {
-        let addr = SocketAddr::new(self.ip_address, MODBUS_COMMUNICATION_PORT);
-        let stream = TcpStream::connect(addr).map_err(Error::Io)?;
-
-        Ok(TcpTransport::new(stream))
-    }
-
-    pub fn is_emulated(&self) -> bool {
-        self.serial_number.is_emulated()
+    /// Creates an emulated LabJack device that is used to run tests against.
+    pub fn emulated() -> LabJackDevice {
+        LabJackDevice {
+            device_type: DeviceType::EMULATED(EMULATED_DEVICE_SERIAL_NUMBER),
+            connection_type: ConnectionType::ETHERNET,
+            ip_address: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            serial_number: LabJackSerialNumber::emulated(),
+            port: MODBUS_COMMUNICATION_PORT,
+        }
     }
 }

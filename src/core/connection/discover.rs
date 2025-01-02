@@ -26,7 +26,7 @@ pub const MODBUS_COMMUNICATION_PORT: u16 = 502;
 pub struct Discover;
 
 impl Discover {
-    pub fn search() -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
+    pub fn search_all() -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
         // Send broadcast request.
         let broadcast = Discover::broadcast(Duration::from_secs(10))?;
         let mut transaction_id = 0;
@@ -83,6 +83,13 @@ impl Discover {
                 Err(error) => Some(Err(Error::Io(error))),
             }
         }))
+    }
+
+    pub fn search() -> Result<impl Iterator<Item = LabJackDevice>, Error> {
+        match Self::search_all() {
+            Ok(iter) => Ok(iter.filter_map(|item| item.ok())),
+            Err(error) => Err(error),
+        }
     }
 
     fn broadcast(duration: Duration) -> Result<UdpSocket, std::io::Error> {

@@ -4,23 +4,20 @@ use crate::core::LabJackDataValue;
 use crate::core::modbus::ReadFunction;
 use crate::prelude::adc::Adc;
 use crate::prelude::LabJackDevice;
-use crate::prelude::modbus::{Error, Reason, TcpTransport, Transport};
+use crate::prelude::modbus::{Error, Reason, Transport};
 
 pub struct LabJackClient<T> where T: Transport {
     pub device: LabJackDevice,
     transport: Box<dyn Client<Error=T::Error>>,
 }
 
-impl LabJackClient<TcpTransport> {
-    pub fn new(device: LabJackDevice) -> Result<LabJackClient<TcpTransport>, Error> {
-        Ok(LabJackClient {
-            device,
-            transport: Box::new(device.transport()?)
-        })
+impl<T> LabJackClient<T> where T: Transport {
+    pub fn new(device: LabJackDevice, transport: Box<dyn Client<Error=T::Error>>) -> LabJackClient<T> {
+        LabJackClient { device, transport }
     }
 
     /// Reads a singular value from a given address on the LabJack.
-    pub fn read<D>(&mut self, channel: D, address: LookupTable) -> Result<<D as Daq>::Digital, Either<Error, <TcpTransport as Transport>::Error>>
+    pub fn read<D>(&mut self, channel: D, address: LookupTable) -> Result<<D as Daq>::Digital, Either<Error, <T as Transport>::Error>>
     where
         D: Daq,
     {
@@ -50,6 +47,7 @@ mod test {
     use crate::core::{LabJackDataValue, LabJackSerialNumber};
     use crate::prelude::{LabJack};
     use crate::prelude::adc::Adc;
+    use crate::prelude::connect::Tcp;
     use crate::prelude::dac::Dac;
     use crate::prelude::LookupTable::Ain55;
 
@@ -77,7 +75,7 @@ mod test {
 
     #[test]
     fn read_butt() {
-        let mut device = LabJack::tcp_by_id(LabJackSerialNumber::emulated())
+        let mut device = LabJack::connect::<Tcp>(LabJackSerialNumber::emulated())
             .expect("Must connect");
 
         let end = ButtEnd(LabJackDataValue::Uint16(100));

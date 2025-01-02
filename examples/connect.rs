@@ -7,12 +7,14 @@ fn main() {
     env_logger::init();
 
     let time = Instant::now();
-    let device = LabJack::connect_by_id(LabJackSerialNumber(470033971))
+
+    // Example for looking for a specific LabJack, using its serial number.
+    let device = LabJack::discover_with_id(LabJackSerialNumber(470033971))
         .expect("Failed to connect to LabJack device");
 
     info!(
-        "Connected to a device on {}:{}",
-        device.device.ip_address, device.device.port
+        "Found a device on {}:{}",
+        device.ip_address, device.port
     );
     info!("Took: {}ms", time.elapsed().as_millis());
 }
