@@ -2,7 +2,7 @@ pub type Address = u16;
 pub type Quantity = u16;
 pub type Value = u16;
 
-pub enum ModbusFeedbackFunction<'a> {
+pub enum FeedbackFunction<'a> {
     ReadRegisters(Address, u8),
     WriteRegisters(Address, &'a [u8]),
 }
@@ -10,7 +10,7 @@ pub enum ModbusFeedbackFunction<'a> {
 pub enum Function<'a> {
     Read(ReadFunction),
     Write(WriteFunction<'a>),
-    Feedback(&'a [ModbusFeedbackFunction<'a>]),
+    Feedback(&'a [FeedbackFunction<'a>]),
 }
 
 pub enum WriteFunction<'a> {
@@ -51,11 +51,11 @@ impl<'a> Function<'a> {
     }
 }
 
-impl<'a> ModbusFeedbackFunction<'a> {
+impl<'a> FeedbackFunction<'a> {
     pub(crate) fn code(&self) -> u8 {
         match *self {
-            ModbusFeedbackFunction::ReadRegisters(_, _) => 0x00,
-            ModbusFeedbackFunction::WriteRegisters(_, _) => 0x01,
+            FeedbackFunction::ReadRegisters(_, _) => 0x00,
+            FeedbackFunction::WriteRegisters(_, _) => 0x01,
         }
     }
 }

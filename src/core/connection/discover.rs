@@ -11,10 +11,7 @@ use std::time::Duration;
 
 use log::debug;
 
-use crate::{
-    core::modbus::tcp::TcpCompositor,
-    prelude::*,
-};
+use crate::prelude::*;
 
 pub const BROADCAST_IP: &str = "192.168.255.255";
 pub const MODBUS_FEEDBACK_PORT: u16 = 52362;
@@ -27,16 +24,16 @@ impl Discover {
         // Send broadcast request.
         let broadcast = Discover::broadcast(Duration::from_secs(10))?;
         let mut transaction_id = 0;
-        let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
+        let mut compositor = Compositor::new(&mut transaction_id, 1);
 
         let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
         let serial_number_addr = translate::LookupTable::SerialNumber.raw().address as u16;
 
-        let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
-        let read_serial_number = ModbusFeedbackFunction::ReadRegisters(serial_number_addr, 2);
+        let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
+        let read_serial_number = FeedbackFunction::ReadRegisters(serial_number_addr, 2);
 
-        let (buf, _, _) = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
-        broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
+        let ComposedMessage { content, .. } = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
+        broadcast.send_to(&content, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
         // Collect all devices from the UDP broadcast
         Ok(std::iter::from_fn(move || {
@@ -102,9 +99,10 @@ impl Discover {
 #[cfg(test)]
 mod test {
     use crate::{
-        core::modbus::{ModbusFeedbackFunction, tcp::TcpCompositor},
+        core::modbus::{FeedbackFunction, Compositor},
         prelude::translate,
     };
+    use crate::prelude::ComposedMessage;
 
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
@@ -117,20 +115,20 @@ mod test {
     #[test]
     fn feedback_function() {
         let mut transaction_id: u16 = 0;
-        let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
+        let mut compositor = Compositor::new(&mut transaction_id, 1);
         let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
 
-        let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
-        let (buf, _, _) = compositor
+        let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
+        let ComposedMessage { content, .. }  = compositor
             .compose_feedback(&[read_product_id])
             .expect("Could not compose ModbusFeedback message");
 
         let as_be = transaction_id.to_be_bytes();
 
         // Transaction Identifier (arbitrary)
-        assert_eq!(buf[0..2], as_be[..]);
+        assert_eq!(content[0..2], as_be[..]);
         assert_eq!(
-            buf[2..],
+            content[2..],
             vec![
                 0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)
                 0x00, 0x06, // Length (6 bytes to follow)

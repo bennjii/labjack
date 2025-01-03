@@ -76,6 +76,19 @@ mod test {
         assert!(value.is_ok());
 
         let value = value.unwrap();
-        assert!(value == LabJackDataValue::Uint16(100));
+        assert_eq!(value, LabJackDataValue::Uint16(100));
+    }
+
+    #[test]
+    fn read_butt_no_filter() {
+        let mut device = LabJack::connect::<Tcp>(LabJackSerialNumber::emulated())
+            .expect("Must connect");
+
+        let value = device.read((), Ain55);
+
+        assert!(value.is_ok());
+
+        let value = value.unwrap();
+        assert_eq!(value, 100f64);
     }
 }

@@ -9,3 +9,13 @@ pub trait Adc {
 
     fn to_digital(&self, voltage: Self::Voltage<'_>) -> Self::Digital;
 }
+
+impl Adc for () {
+    type Digital = f64;
+
+    type Voltage<'a> = f64;
+
+    fn to_digital(&self, voltage: Self::Voltage<'_>) -> Self::Digital {
+        voltage
+    }
+}
