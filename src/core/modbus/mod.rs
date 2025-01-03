@@ -9,5 +9,4 @@ pub use binary::*;
 pub use client::*;
 pub use error::*;
 pub use function::*;
-pub use tcp::*;
 pub use transport::*;

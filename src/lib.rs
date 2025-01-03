@@ -10,8 +10,8 @@ pub mod prelude {
         include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
     }
 
+    pub use translate::*;
+
     pub use crate::core::LabJack;
     pub use crate::core::*;
-    pub use translate::*;
-    pub use discover::*;
 }

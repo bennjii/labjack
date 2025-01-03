@@ -1,4 +1,4 @@
-use super::{ConnectionType, DeviceType, LabJackDataValue};
+use super::{ConnectionType, DeviceType};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};

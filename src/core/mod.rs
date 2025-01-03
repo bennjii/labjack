@@ -14,3 +14,5 @@ pub use device::*;
 pub use dist::*;
 pub use func::*;
 pub use sets::*;
+pub use modbus::*;
+pub use client::*;

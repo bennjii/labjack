@@ -1,10 +1,6 @@
 use either::Either;
-use crate::{core::conversion::daq::Daq, prelude::LookupTable, core::modbus::Client};
-use crate::core::LabJackDataValue;
-use crate::core::modbus::ReadFunction;
-use crate::prelude::adc::Adc;
-use crate::prelude::LabJackDevice;
-use crate::prelude::modbus::{Error, Reason, Transport};
+
+use crate::prelude::*;
 
 pub struct LabJackClient<T> where T: Transport {
     pub device: LabJackDevice,
@@ -44,12 +40,8 @@ impl<T> LabJackClient<T> where T: Transport {
 
 #[cfg(test)]
 mod test {
-    use crate::core::{LabJackDataValue, LabJackSerialNumber};
-    use crate::prelude::{LabJack};
-    use crate::prelude::adc::Adc;
-    use crate::prelude::connect::Tcp;
-    use crate::prelude::dac::Dac;
-    use crate::prelude::LookupTable::Ain55;
+    use crate::prelude::*;
+    use crate::prelude::{methods::tcp::Tcp, LookupTable::Ain55};
 
     /// A mocked DAQ used to override the values
     /// provided by conversions to test how the unit value operates.

@@ -12,11 +12,8 @@ use std::time::Duration;
 use log::debug;
 
 use crate::{
-    core::{
-        modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
-        ConnectionType, DeviceType, LabJackDevice, LabJackSerialNumber,
-    },
-    prelude::translate,
+    core::modbus::tcp::TcpCompositor,
+    prelude::*,
 };
 
 pub const BROADCAST_IP: &str = "192.168.255.255";
@@ -105,7 +102,7 @@ impl Discover {
 #[cfg(test)]
 mod test {
     use crate::{
-        core::modbus::{ModbusFeedbackFunction, TcpCompositor},
+        core::modbus::{ModbusFeedbackFunction, tcp::TcpCompositor},
         prelude::translate,
     };
 
