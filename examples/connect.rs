@@ -1,5 +1,5 @@
-use std::time::Instant;
 use log::info;
+use std::time::Instant;
 
 use labjack::prelude::*;
 
@@ -12,9 +12,6 @@ fn main() {
     let device = LabJack::discover_with_id(LabJackSerialNumber(470033971))
         .expect("Failed to connect to LabJack device");
 
-    info!(
-        "Found a device on {}:{}",
-        device.ip_address, device.port
-    );
+    info!("Found a device on {}:{}", device.ip_address, device.port);
     info!("Took: {}ms", time.elapsed().as_millis());
 }

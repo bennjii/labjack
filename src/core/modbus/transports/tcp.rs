@@ -1,16 +1,16 @@
+use enum_primitive::FromPrimitive;
+use std::collections::HashSet;
+use std::net::SocketAddr;
 use std::{
     io::{Read, Write},
     net::{Shutdown, TcpStream},
 };
-use std::collections::HashSet;
-use enum_primitive::FromPrimitive;
-use crate::core::{ComposedMessage, FeedbackFunction};
-use crate::core::composite::Compositor;
-use crate::prelude::composite::Header;
-use crate::prelude::WriteFunction;
-use super::{
-    Error, ExceptionCode, Reason, Transport, MODBUS_HEADER_SIZE, MODBUS_PROTOCOL_TCP,
-};
+
+use crate::prelude::*;
+
+pub const MODBUS_PROTOCOL_TCP: u16 = 0x0000;
+
+pub const MODBUS_TCP_DEFAULT_PORT: u16 = 502;
 
 /// As referenced in the LabJack manual fields documentation for ModBus messages,
 /// the UnitID field is not used (as bridging is not used). Therefore, the default
@@ -41,7 +41,7 @@ pub struct TcpTransport {
     /// [`u16::MAX`], no more transactions can be made. It is key
     /// that upon the completion of a transaction, it's identifier
     /// is removed from this set.
-    existing_transactions: HashSet<u16>
+    existing_transactions: HashSet<u16>,
 }
 
 impl TcpTransport {
@@ -51,7 +51,7 @@ impl TcpTransport {
             transaction_id: STARTING_TRANSACTION_ID,
 
             stream,
-            existing_transactions: HashSet::new()
+            existing_transactions: HashSet::new(),
         }
     }
 
@@ -114,7 +114,9 @@ impl Transport for TcpTransport {
     type Error = Error;
 
     fn write(&mut self, function: &WriteFunction) -> Result<(), Self::Error> {
-        let ComposedMessage { content, header, .. } = self.compositor().compose_write(function)?;
+        let ComposedMessage {
+            content, header, ..
+        } = self.compositor().compose_write(function)?;
 
         match self.stream.write_all(&content) {
             Ok(_s) => {
@@ -132,8 +134,12 @@ impl Transport for TcpTransport {
         }
     }
 
-    fn read(&mut self, function: &super::ReadFunction) -> Result<Box<[u8]>, Self::Error> {
-        let ComposedMessage { content, header, expected_bytes } = self.compositor().compose_read(function)?;
+    fn read(&mut self, function: &ReadFunction) -> Result<Box<[u8]>, Self::Error> {
+        let ComposedMessage {
+            content,
+            header,
+            expected_bytes,
+        } = self.compositor().compose_read(function)?;
         let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
 
         self.stream.write_all(&content).map_err(Error::Io)?;
@@ -150,7 +156,11 @@ impl Transport for TcpTransport {
     }
 
     fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
-        let ComposedMessage { content, header, expected_bytes } = self.compositor().compose_feedback(data)?;
+        let ComposedMessage {
+            content,
+            header,
+            expected_bytes,
+        } = self.compositor().compose_feedback(data)?;
         let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
 
         self.stream.write_all(&content).map_err(Error::Io)?;
@@ -164,5 +174,34 @@ impl Transport for TcpTransport {
         TcpTransport::validate_response_header(&header, &resp_hd)?;
         TcpTransport::validate_response_code(&content, &reply)?;
         TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
+    }
+}
+
+/// The TCP ModBus client.
+///
+/// Example:
+/// ```
+/// // Import prelude items
+/// use labjack::prelude::*;
+/// // Import the specific pin we wish to read
+/// use labjack::prelude::LookupTable::Ain55;
+///
+/// // Connect to our LabJack over TCP
+/// let mut device = LabJack::connect::<Emulated>(-2).expect("Must connect");
+/// // Read the AIN55 pin without an extended feature
+/// let voltage = device.read(Ain55, ()).expect("Must read");
+///
+/// println!("Voltage={}", voltage);
+/// ```
+pub struct Tcp;
+
+impl Connect for Tcp {
+    type Transport = TcpTransport;
+
+    fn connect(device: LabJackDevice) -> Result<Connection<Self::Transport>, Error> {
+        let addr = SocketAddr::new(device.ip_address, MODBUS_COMMUNICATION_PORT);
+        let stream = TcpStream::connect(addr).map_err(Error::Io)?;
+
+        Ok(Box::new(TcpTransport::new(stream)))
     }
 }

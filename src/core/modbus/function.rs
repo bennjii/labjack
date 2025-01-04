@@ -1,6 +1,7 @@
+use crate::prelude::LabJackDataValue;
+
 pub type Address = u16;
 pub type Quantity = u16;
-pub type Value = u16;
 
 pub enum FeedbackFunction<'a> {
     ReadRegisters(Address, u8),
@@ -14,8 +15,8 @@ pub enum Function<'a> {
 }
 
 pub enum WriteFunction<'a> {
-    SingleRegister(Address, Value),
-    MultipleRegisters(Address, Quantity, &'a [u8]),
+    SingleRegister(Address, LabJackDataValue),
+    MultipleRegisters(Address, &'a [LabJackDataValue]),
 }
 
 pub enum ReadFunction {

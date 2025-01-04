@@ -1,11 +1,7 @@
-use std::io;
-use std::io::Write;
-use std::borrow::BorrowMut;
-
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::io;
 
-use crate::core::{Error, Function, FeedbackFunction, Reason, MODBUS_HEADER_SIZE, MODBUS_MAX_PACKET_SIZE, MODBUS_PROTOCOL_TCP, WriteFunction};
-use crate::prelude::ReadFunction;
+use crate::prelude::*;
 
 /// Ephemeral structure created from the transport to compose messages. It's internal state is
 /// only of a mutable extension of the [`Transport`] explicitly only containing domain-specific
@@ -22,7 +18,7 @@ pub struct ComposedMessage {
     pub content: Vec<u8>,
 
     pub(crate) header: Header,
-    pub(crate) expected_bytes: usize
+    pub(crate) expected_bytes: usize,
 }
 
 /// The header on a given modbus message.
@@ -52,8 +48,7 @@ impl<'a> Compositor<'a> {
 
     pub fn compose_read(&mut self, function: &ReadFunction) -> Result<ComposedMessage, Error> {
         let (addr, count, expected_bytes) = match *function {
-            ReadFunction::HoldingRegisters(a, c)
-            | ReadFunction::InputRegisters(a, c) => {
+            ReadFunction::HoldingRegisters(a, c) | ReadFunction::InputRegisters(a, c) => {
                 (a, c, 2 * c as usize)
             }
         };
@@ -77,38 +72,60 @@ impl<'a> Compositor<'a> {
         content.write_u16::<BigEndian>(count)?;
 
         Ok(ComposedMessage {
-            content, header, expected_bytes
+            content,
+            header,
+            expected_bytes,
         })
     }
 
     pub fn compose_write(&mut self, function: &WriteFunction) -> Result<ComposedMessage, Error> {
         let size = match function {
             WriteFunction::SingleRegister(..) => 5,
-            WriteFunction::MultipleRegisters(.., bytes) => 6 + bytes.len()
+            WriteFunction::MultipleRegisters(.., bytes) => 6 + bytes.len(),
         };
 
         let header = Header::new(self, size as u16 + 1u16);
-        let mut buff = header.pack()?;
-        buff.write_u8(function.code())?;
+        let mut content = header.pack()?;
+        content.write_u8(function.code())?;
 
         match *function {
-            WriteFunction::SingleRegister(addr, val) => {
-                buff.write_u16::<BigEndian>(addr)?;
-                buff.write_u16::<BigEndian>(val)?;
-            },
-            WriteFunction::MultipleRegisters(addr, quantity, bytes) => {
-                buff.write_u16::<BigEndian>(addr)?;
-                buff.write_u16::<BigEndian>(quantity)?;
-                buff.write_u8(bytes.len() as u8)?;
+            WriteFunction::SingleRegister(addr, value) => {
+                content.write_u16::<BigEndian>(addr)?;
+
+                match value {
+                    LabJackDataValue::Uint16(val) => content.write_u16::<BigEndian>(val)?,
+                    // Registers are only U16.
+                    _ => return Err(Error::InvalidData(Reason::SendBufferTooBig)),
+                }
+            }
+            WriteFunction::MultipleRegisters(addr, values) => {
+                content.write_u16::<BigEndian>(addr)?;
+                content.write_u16::<BigEndian>(values.len() as u16)?;
+
+                // Cast all registers to U16
+                let as_u16s = values
+                    .into_iter()
+                    .map(|v| {
+                        match v {
+                            LabJackDataValue::Uint16(v) => Ok(*v),
+                            _ => Err(Error::InvalidData(Reason::SendBufferTooBig)),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                let bytes = unpack_bytes(as_u16s.as_slice());
+                content.write_u8(bytes.len() as u8)?;
 
                 for v in bytes {
-                    buff.write_u8(*v)?;
+                    content.write_u8(v)?;
                 }
             }
         }
 
         Ok(ComposedMessage {
-            content, header, expected_bytes: 0usize
+            content,
+            header,
+            expected_bytes: 0usize,
         })
     }
 
@@ -148,7 +165,9 @@ impl<'a> Compositor<'a> {
         }
 
         Ok(ComposedMessage {
-            content, header, expected_bytes: 7 + read_return_size
+            content,
+            header,
+            expected_bytes: 7 + read_return_size,
         })
     }
 }

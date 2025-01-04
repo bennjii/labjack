@@ -1,6 +1,5 @@
-pub mod discover;
 pub mod connect;
-pub mod methods;
+pub mod discover;
 
-pub use discover::*;
 pub use connect::*;
+pub use discover::*;

@@ -29,6 +29,7 @@ pub enum Reason {
     EncodingError,
     InvalidByteorder,
     RegisterMismatch,
+    NoDataAtRegister,
     Custom(String),
 }
 

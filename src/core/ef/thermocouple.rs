@@ -171,8 +171,7 @@ impl Thermocouple {
 impl Thermocouple {
     pub fn temp_from_volt(&self, volt: &f64) -> f64 {
         let as_microvolt = volt / 1e-6;
-        self
-            .voltage_coefficients()
+        self.voltage_coefficients()
             .iter()
             .enumerate()
             .fold(0.0, |accumulator, (index, coeff)| {

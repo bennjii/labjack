@@ -1,4 +1,4 @@
-use crate::core::{LabJackDataValue};
+use crate::core::LabJackDataValue;
 
 pub trait Dac {
     type Digital<'a>

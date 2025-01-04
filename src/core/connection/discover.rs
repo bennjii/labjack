@@ -32,7 +32,8 @@ impl Discover {
         let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
         let read_serial_number = FeedbackFunction::ReadRegisters(serial_number_addr, 2);
 
-        let ComposedMessage { content, .. } = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
+        let ComposedMessage { content, .. } =
+            compositor.compose_feedback(&[read_product_id, read_serial_number])?;
         broadcast.send_to(&content, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
         // Collect all devices from the UDP broadcast
@@ -98,11 +99,11 @@ impl Discover {
 
 #[cfg(test)]
 mod test {
+    use crate::prelude::ComposedMessage;
     use crate::{
-        core::modbus::{FeedbackFunction, Compositor},
+        core::modbus::{Compositor, FeedbackFunction},
         prelude::translate,
     };
-    use crate::prelude::ComposedMessage;
 
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
@@ -119,7 +120,7 @@ mod test {
         let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
 
         let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
-        let ComposedMessage { content, .. }  = compositor
+        let ComposedMessage { content, .. } = compositor
             .compose_feedback(&[read_product_id])
             .expect("Could not compose ModbusFeedback message");
 

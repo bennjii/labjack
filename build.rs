@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     writeln!(&mut file, "use serde::{{Deserialize, Serialize}};").unwrap();
     writeln!(
         &mut file,
-        "#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]"
+        "#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq, Serialize, Deserialize)]"
     )
     .unwrap();
     writeln!(&mut file, "pub enum {} {{", LOOKUP_TABLE).unwrap();

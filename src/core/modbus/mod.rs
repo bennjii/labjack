@@ -1,14 +1,15 @@
 pub mod binary;
 pub mod client;
+pub mod composite;
 pub mod error;
 pub mod function;
-pub mod tcp;
 pub mod transport;
-pub mod composite;
+pub mod transports;
 
 pub use binary::*;
 pub use client::*;
+pub use composite::*;
 pub use error::*;
 pub use function::*;
 pub use transport::*;
-pub use composite::*;
+pub use transports::*;

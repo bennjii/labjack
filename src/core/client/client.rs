@@ -1,30 +1,49 @@
 use either::Either;
-
 use crate::prelude::*;
 
-pub struct LabJackClient<T> where T: Transport {
+pub struct LabJackClient<T>
+where
+    T: Transport,
+{
     pub device: LabJackDevice,
-    transport: Box<dyn Client<Error=T::Error>>,
+    transport: Box<dyn Client<Error = T::Error>>,
 }
 
-impl<T> LabJackClient<T> where T: Transport {
-    pub fn new(device: LabJackDevice, transport: Box<dyn Client<Error=T::Error>>) -> LabJackClient<T> {
+impl<T> LabJackClient<T>
+where
+    T: Transport,
+{
+    pub fn new(
+        device: LabJackDevice,
+        transport: Box<dyn Client<Error = T::Error>>,
+    ) -> LabJackClient<T> {
         LabJackClient { device, transport }
     }
 
     /// Reads a singular value from a given address on the LabJack.
-    pub fn read<D>(&mut self, channel: D, address: LookupTable) -> Result<<D as Daq>::Digital, Either<Error, <T as Transport>::Error>>
+    pub fn read<D>(
+        &mut self,
+        address: LookupTable,
+        channel: D,
+    ) -> Result<<D as Daq>::Digital, Either<Error, <T as Transport>::Error>>
     where
         D: Daq,
     {
         let entity = address.raw();
-        let expected_registers = entity.size() * 2;
+        let expected_registers = entity.data_type.size();
 
-        let bytes = self.transport.read(
-            &ReadFunction::InputRegisters(entity.address as u16, entity.size())
-        ).map_err(|e| Either::Right(e))?;
+        let bytes = self
+            .transport
+            .read(&ReadFunction::InputRegisters(
+                entity.address as u16,
+                entity.data_type.size(),
+            ))
+            .map_err(|e| Either::Right(e))?;
 
         let num_registers = bytes[0];
+        println!("Got registers: {}", num_registers);
+        println!("Expected registers: {:?}", expected_registers);
+
         if num_registers != expected_registers as u8 {
             return Err(Either::Left(Reason::RegisterMismatch.into()));
         }
@@ -40,8 +59,8 @@ impl<T> LabJackClient<T> where T: Transport {
 
 #[cfg(test)]
 mod test {
+    use crate::prelude::LookupTable::Ain55;
     use crate::prelude::*;
-    use crate::prelude::{methods::tcp::Tcp, LookupTable::Ain55};
 
     /// A mocked DAQ used to override the values
     /// provided by conversions to test how the unit value operates.
@@ -67,13 +86,13 @@ mod test {
 
     #[test]
     fn read_butt() {
-        let mut device = LabJack::connect::<Tcp>(LabJackSerialNumber::emulated())
-            .expect("Must connect");
+        let mut device =
+            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
         let end = ButtEnd(LabJackDataValue::Uint16(100));
-        let value = device.read(end, Ain55);
+        let value = device.read(Ain55, end);
 
-        assert!(value.is_ok());
+        assert!(value.is_ok(), "result={:?}", value);
 
         let value = value.unwrap();
         assert_eq!(value, LabJackDataValue::Uint16(100));
@@ -81,14 +100,19 @@ mod test {
 
     #[test]
     fn read_butt_no_filter() {
-        let mut device = LabJack::connect::<Tcp>(LabJackSerialNumber::emulated())
-            .expect("Must connect");
+        let mut device =
+            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
-        let value = device.read((), Ain55);
+        let value = device.read(Ain55, ());
 
-        assert!(value.is_ok());
+        assert!(value.is_ok(), "result={:?}", value);
 
         let value = value.unwrap();
-        assert_eq!(value, 100f64);
+        assert_eq!(value, 0f64);
+    }
+
+    #[test]
+    fn k() {
+        println!("{:?}", Ain55.raw());
     }
 }

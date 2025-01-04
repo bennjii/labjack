@@ -1,9 +1,9 @@
 use super::{ConnectionType, DeviceType};
+use crate::prelude::discover::MODBUS_COMMUNICATION_PORT;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Deref;
-use crate::prelude::discover::MODBUS_COMMUNICATION_PORT;
 
 pub const EMULATED_DEVICE_SERIAL_NUMBER: i32 = -2;
 
@@ -17,6 +17,12 @@ impl LabJackSerialNumber {
 
     pub fn emulated() -> LabJackSerialNumber {
         LabJackSerialNumber(EMULATED_DEVICE_SERIAL_NUMBER)
+    }
+}
+
+impl From<i32> for LabJackSerialNumber {
+    fn from(value: i32) -> Self {
+        LabJackSerialNumber(value)
     }
 }
 
