@@ -12,6 +12,7 @@ use std::time::Duration;
 use log::debug;
 
 use crate::prelude::*;
+use crate::prelude::data_types::Register;
 
 pub const BROADCAST_IP: &str = "192.168.255.255";
 pub const MODBUS_FEEDBACK_PORT: u16 = 52362;
@@ -26,8 +27,8 @@ impl Discover {
         let mut transaction_id = 0;
         let mut compositor = Compositor::new(&mut transaction_id, 1);
 
-        let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
-        let serial_number_addr = translate::LookupTable::SerialNumber.raw().address as u16;
+        let product_id_addr = ProductId::ADDRESS;
+        let serial_number_addr = SerialNumber::ADDRESS;
 
         let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
         let read_serial_number = FeedbackFunction::ReadRegisters(serial_number_addr, 2);
@@ -99,12 +100,12 @@ impl Discover {
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::ComposedMessage;
+    use crate::prelude::{ComposedMessage, ProductId};
     use crate::{
         core::modbus::{Compositor, FeedbackFunction},
         prelude::translate,
     };
-
+    use crate::prelude::data_types::Register;
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
     //    +--------+  +--+  +  +   +-----------+
@@ -117,7 +118,7 @@ mod test {
     fn feedback_function() {
         let mut transaction_id: u16 = 0;
         let mut compositor = Compositor::new(&mut transaction_id, 1);
-        let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
+        let product_id_addr = ProductId::ADDRESS;
 
         let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
         let ComposedMessage { content, .. } = compositor

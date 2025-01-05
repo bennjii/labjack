@@ -1,9 +1,10 @@
+use crate::core::func::data_types::*;
 use crate::prelude::modbus::{Error, Quantity, Reason};
 use crate::prelude::translate::LookupTable;
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
-use crate::prelude::ModbusRegister;
+use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -12,6 +13,104 @@ pub enum LabJackDataType {
     Uint32 = 1,
     Int32 = 2,
     Float32 = 3,
+    Uint64 = 4,
+    String = 98,
+    Byte = 99,
+}
+
+pub trait DataType: Debug {
+    type Value: FromPrimitive + ToPrimitive + Clone + Debug;
+
+    fn data_type() -> LabJackDataType;
+}
+
+pub mod data_types {
+    use num::FromPrimitive;
+    use crate::core::{DataType, LabJackDataType, LabJackDataValue, Reason};
+    use crate::prelude::{Error, LabJackEntity};
+    use serde::{Deserialize, Serialize};
+
+    macro_rules! impl_traits {
+        ($($struct:ident => $value:ty),* $(,)?) => {
+            $(
+                #[derive(Debug, Clone, Serialize, Deserialize)]
+                pub struct $struct;
+
+                impl Coerce for $struct {
+                    fn coerce(value: <$struct as DataType>::Value) -> LabJackDataValue {
+                        LabJackDataValue::$struct(value)
+                    }
+                }
+
+                impl DataType for $struct {
+                    type Value = $value;
+
+                    fn data_type() -> LabJackDataType {
+                        LabJackDataType::$struct
+                    }
+                }
+            )*
+        };
+    }
+
+    /// Allows for upcasting a given primitive into a [`LabJackDataValue`]
+    /// for intermediary handling of unknown/aggregated data instances.
+    pub trait Coerce: DataType {
+        fn coerce(value: <Self as DataType>::Value) -> LabJackDataValue; // Must not fail, ever.
+    }
+
+    impl_traits! {
+        Uint16 => u16,
+        Uint32 => u32,
+        Uint64 => u64,
+        Int32 => i32,
+        Float32 => f32,
+        Byte => u8,
+    }
+
+    trait Decoder {
+        fn decode_primitive<F: FromPrimitive>(&self) -> Result<F, Error>;
+    }
+
+    pub trait Decode: Coerce {
+        fn try_decode<D: Decoder>(v: D) -> Result<<Self as DataType>::Value, Error>;
+    }
+
+    pub struct StandardDecoder<'a> {
+        pub bytes: &'a [u8],
+    }
+
+    pub struct EmulatedDecoder {
+        pub value: LabJackDataValue
+    }
+
+    impl Decoder for EmulatedDecoder {
+        fn decode_primitive<F: FromPrimitive>(&self) -> Result<F, Error> {
+            // Apply indirection
+            let as_f64 = self.value.as_f64();
+            F::from_f64(as_f64).ok_or(Error::InvalidData(Reason::DecodingError))
+        }
+    }
+
+    impl Decoder for StandardDecoder<'_> {
+        fn decode_primitive<F: FromPrimitive>(&self) -> Result<F, Error> {
+            LabJackDataValue::decode_bytes::<F>(self.bytes)
+        }
+    }
+
+    impl<T> Decode for T where T: Coerce {
+        fn try_decode<D: Decoder>(v: D) -> Result<T::Value, Error> {
+            v.decode_primitive::<T::Value>()
+        }
+    }
+
+    pub trait Register {
+        type DataType: Decode;
+        const NAME: &'static str;
+        const ADDRESS: u16;
+
+        fn entity() -> LabJackEntity<<Self as Register>::DataType>;
+    }
 }
 
 impl LabJackDataType {
@@ -33,12 +132,19 @@ impl LabJackDataType {
     }
 }
 
+pub struct DataValue<T: DataType> {
+    pub value: T::Value,
+}
+
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum LabJackDataValue {
     Uint16(u16),
     Uint32(u32),
+    Uint64(u64),
     Int32(i32),
     Float32(f32),
+    Byte(u8),
+    String(f32) // Make string
 }
 
 impl From<LabJackDataValue> for f64 {
@@ -46,8 +152,11 @@ impl From<LabJackDataValue> for f64 {
         match value {
             LabJackDataValue::Uint16(x) => x as f64,
             LabJackDataValue::Uint32(x) => x as f64,
+            LabJackDataValue::Uint64(x) => x as f64,
             LabJackDataValue::Int32(x) => x as f64,
             LabJackDataValue::Float32(x) => x as f64,
+            LabJackDataValue::Byte(x) => x as f64,
+            LabJackDataValue::String(x) => x as f64,
         }
     }
 }
@@ -57,15 +166,15 @@ impl LabJackDataValue {
         match self {
             LabJackDataValue::Uint16(_) => LabJackDataType::Uint16,
             LabJackDataValue::Uint32(_) => LabJackDataType::Uint32,
+            LabJackDataValue::Uint64(_) => LabJackDataType::Uint64,
             LabJackDataValue::Int32(_) => LabJackDataType::Int32,
             LabJackDataValue::Float32(_) => LabJackDataType::Float32,
+            LabJackDataValue::Byte(_) => LabJackDataType::Byte,
+            LabJackDataValue::String(_) => LabJackDataType::String,
         }
     }
 
-    pub fn register(value: ModbusRegister) -> LabJackDataValue {
-        LabJackDataValue::Uint16(value)
-    }
-
+    /// Union-Backed Downcast to a HOT.
     pub fn as_f64(&self) -> f64 {
         f64::from(*self)
     }
@@ -106,47 +215,37 @@ impl LabJackDataValue {
             LabJackDataType::Float32 => Ok(LabJackDataValue::Float32(
                 LabJackDataValue::decode_bytes::<f32>(bytes)?, // f32::from_be_bytes(bytes.try_into().map_err(|_| Error::InvalidData(Reason::DecodingError))?)
             )),
-        }
-    }
-}
-
-impl LabJackDataType {
-    const fn from_u32(value: u32) -> Self {
-        match value {
-            0 => LabJackDataType::Uint16,
-            1 => LabJackDataType::Uint32,
-            2 => LabJackDataType::Int32,
-            3 => LabJackDataType::Float32,
-            _ => panic!("Invalid data type. Must be between 0 and 3, inclusive."),
+            LabJackDataType::Uint64 => Ok(LabJackDataValue::Uint64(
+                LabJackDataValue::decode_bytes::<u64>(bytes)?, // f32::from_be_bytes(bytes.try_into().map_err(|_| Error::InvalidData(Reason::DecodingError))?)
+            )),
+            LabJackDataType::Byte => unimplemented!(),
+            LabJackDataType::String => unimplemented!(),
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct LabJackEntity {
+pub struct LabJackEntity<T: Decode> {
     pub entry: LookupTable,
-
     pub address: u32,
-    pub data_type: LabJackDataType,
+
+    pub data_type: PhantomData<T>,
 }
 
-impl From<LookupTable> for LabJackEntity {
-    fn from(val: LookupTable) -> Self {
-        val.raw()
-    }
-}
-
-impl LabJackEntity {
-    pub const fn new(address: u32, data_type: u32, entry: LookupTable) -> LabJackEntity {
+impl<T: Decode> LabJackEntity<T> {
+    pub const fn new(address: u32, entry: LookupTable) -> LabJackEntity<T> {
         LabJackEntity {
             address,
             entry,
-            data_type: LabJackDataType::from_u32(data_type),
+            data_type: PhantomData,
         }
     }
 }
 
-impl Display for LabJackEntity {
+impl<T> Display for LabJackEntity<T>
+where
+    T: Decode,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.entry)
     }

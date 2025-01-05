@@ -1,12 +1,16 @@
+use crate::core::data_types::Register;
+use crate::core::DataType;
+use crate::prelude::data_types::Decode;
 use crate::prelude::modbus::ReadFunction;
-use crate::prelude::{FeedbackFunction, WriteFunction};
+use crate::prelude::{FeedbackFunction, LabJackDataValue, WriteFunction};
 
 pub trait Transport {
     type Error: From<std::io::Error> + Sized;
 
     fn write(&mut self, function: &WriteFunction) -> Result<(), Self::Error>;
-    // TODO: Return type should be register values not bytes - Take impl from client.rs:44
-    fn read(&mut self, function: &ReadFunction) -> Result<Box<[u8]>, Self::Error>;
+    fn read<R>(&mut self, function: &ReadFunction<R>) -> Result<<R::DataType as DataType>::Value, Self::Error>
+    where
+        R: Register;
     // TODO: Return type should be feedback values not bytes
     fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error>;
 }

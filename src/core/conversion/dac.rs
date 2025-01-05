@@ -5,19 +5,13 @@ pub trait Dac {
     where
         Self: 'a;
 
-    type Voltage<'a>: From<LabJackDataValue>
-    where
-        Self: 'a;
-
-    fn to_voltage(&self, digital: Self::Digital<'_>) -> Self::Voltage<'_>;
+    fn to_voltage(&self, digital: Self::Digital<'_>) -> LabJackDataValue;
 }
 
 impl Dac for () {
-    type Digital<'a> = f64;
+    type Digital<'a> = LabJackDataValue;
 
-    type Voltage<'a> = f64;
-
-    fn to_voltage(&self, digital: Self::Digital<'_>) -> Self::Voltage<'_> {
+    fn to_voltage(&self, digital: Self::Digital<'_>) -> LabJackDataValue {
         digital
     }
 }

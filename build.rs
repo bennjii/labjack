@@ -28,6 +28,22 @@ fn to_camel_case(input: &str) -> String {
     result
 }
 
+fn resolve_data_type(variant: u32) -> &'static str {
+    match variant {
+        0 => "crate::prelude::data_types::Uint16",
+        1 => "crate::prelude::data_types::Uint32",
+        2 => "crate::prelude::data_types::Int32",
+        3 => "crate::prelude::data_types::Float32",
+        4 => "crate::prelude::data_types::Uint64",
+        99 => "crate::prelude::data_types::Byte",
+        98 => "crate::prelude::data_types::Byte", // TODO: Support `String`.
+        variant => panic!(
+            "Unsupported data type: {}. Expected one-of 0,1,2,34,98,99.",
+            variant
+        ),
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     // Path to the C header file
     let header_path = "./resources/LabJackMModbusMap.h";
@@ -52,8 +68,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .and_then(|v| v.strip_suffix("};"))
                 .and_then(|v| v.split_once('='))
                 .and_then(|(a, b)| {
-                    if line.contains("_ADDRESS") {
-                        a.split_once("_ADDRESS ").map(|(key, _)| {
+                    if a.ends_with("_ADDRESS ") {
+                        a.rsplit_once("_ADDRESS").map(|(key, _)| {
                             let addr = b.trim().parse::<u32>().ok();
                             if addr.is_none() {
                                 eprintln!("Could not parse address (integer) of value: {}", b);
@@ -61,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             (to_camel_case(key), (addr, None))
                         })
                     } else {
-                        a.split_once("_TYPE ").map(|(key, _)| {
+                        a.rsplit_once("_TYPE").map(|(key, _)| {
                             let d_type = b.trim().parse::<u32>().ok();
                             if d_type.is_none() {
                                 eprintln!("Could not parse datatype (integer) of value: {}", b);
@@ -100,28 +116,77 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // writeln!(&mut file, "impl From<{}> for (u32, u32) {{", LOOKUP_TABLE).unwrap();
     writeln!(&mut file, "impl {} {{", LOOKUP_TABLE).unwrap();
-    writeln!(
-        &mut file,
-        "    pub const fn raw(&self) -> crate::core::LabJackEntity {{",
-    )
-    .unwrap();
-    writeln!(&mut file, "        match self {{",).unwrap();
+    // writeln!(
+    //     &mut file,
+    //     "    pub const fn raw(&self) -> crate::core::LabJackEntity<impl crate::prelude::data_types::Decode> {{",
+    // )
+    // .unwrap();
+    // writeln!(&mut file, "        match self {{",).unwrap();
+    // for (key, (address, data_type)) in &map {
+    //     writeln!(
+    //         &mut file,
+    //         "            {}::{} => crate::core::LabJackEntity::<{}>::new({}, {}::{}),",
+    //         LOOKUP_TABLE,
+    //         key,
+    //         resolve_data_type(data_type.ok_or(format!(
+    //             "Could not decode given labjack data type for {}",
+    //             key
+    //         ))?),
+    //         address.ok_or(format!(
+    //             "Could not decode given labjack address for {}",
+    //             key
+    //         ))?,
+    //         LOOKUP_TABLE,
+    //         key,
+    //     )
+    //     .unwrap();
+    // }
+    // writeln!(&mut file, "         }}",).unwrap();
+    // writeln!(&mut file, "    }}",).unwrap();
+
+    writeln!(&mut file, "}}",).unwrap();
+
     for (key, (address, data_type)) in map {
+        let dt = resolve_data_type(data_type.unwrap());
+        let addr = address.unwrap();
+
+        let content = format!(
+            "crate::core::LabJackEntity::<{}>::new({}, {}::{})",
+            resolve_data_type(data_type.ok_or(format!(
+                "Could not decode given labjack data type for {}",
+                key
+            ))?),
+            address.ok_or(format!(
+                "Could not decode given labjack address for {}",
+                key
+            ))?,
+            LOOKUP_TABLE,
+            key,
+        );
+
         writeln!(
             &mut file,
-            "            {}::{} => crate::core::LabJackEntity::new({}, {}, {}::{}),",
-            LOOKUP_TABLE,
-            key,
-            address.ok_or("Could not decode given labjack address")?,
-            data_type.unwrap_or(0),
-            LOOKUP_TABLE,
-            key,
-        )
+            r#"
+            /// The {key} register.
+            ///
+            /// Data Type: **{dt}**
+            ///
+            /// Address: **{addr}**
+            ///
+            pub struct {key};
+
+            impl crate::prelude::data_types::Register for {key} {{
+                type DataType = {dt};
+                const NAME: &'static str = "{key}";
+                const ADDRESS: u16 = {addr};
+
+                fn entity() -> crate::core::LabJackEntity<Self::DataType> {{
+                    {content}
+                }}
+            }}
+        "#)
         .unwrap();
     }
-    writeln!(&mut file, "         }}",).unwrap();
-    writeln!(&mut file, "    }}",).unwrap();
-    writeln!(&mut file, "}}",).unwrap();
 
     Ok(())
 }

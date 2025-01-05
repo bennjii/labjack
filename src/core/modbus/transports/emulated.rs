@@ -1,7 +1,9 @@
+use crate::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
-use byteorder::{BigEndian, WriteBytesExt};
-use crate::prelude::*;
+
+use crate::core::data_types::{Decode, EmulatedDecoder};
+use crate::prelude::data_types::Register;
 
 pub struct EmulatedValue {
     base: LabJackDataValue,
@@ -12,28 +14,28 @@ impl EmulatedValue {
     fn transparent(base: LabJackDataValue) -> EmulatedValue {
         EmulatedValue {
             base,
-            function: |a, _| a
+            function: |a, _| a,
         }
     }
 
     fn floating() -> &'static EmulatedValue {
         &EmulatedValue {
             base: LabJackDataValue::Uint16(0),
-            function: |a, _| a
+            function: |a, _| a,
         }
     }
 }
 
 pub struct EmulatedTransport {
     addresses: HashMap<Address, EmulatedValue>,
-    device: LabJackDevice
+    device: LabJackDevice,
 }
 
 impl EmulatedTransport {
     fn new(device: LabJackDevice) -> EmulatedTransport {
         EmulatedTransport {
             addresses: HashMap::new(),
-            device
+            device,
         }
     }
 }
@@ -44,11 +46,13 @@ impl Transport for EmulatedTransport {
     fn write(&mut self, function: &WriteFunction) -> Result<(), Self::Error> {
         match function {
             WriteFunction::SingleRegister(addr, val) => {
-                self.addresses.insert(*addr, EmulatedValue::transparent(*val));
+                self.addresses
+                    .insert(*addr, EmulatedValue::transparent(*val));
             }
             WriteFunction::MultipleRegisters(addr, values) => {
                 for (index, value) in values.into_iter().enumerate() {
-                    self.addresses.insert(*addr + index as Address, EmulatedValue::transparent(*value));
+                    self.addresses
+                        .insert(*addr + index as Address, EmulatedValue::transparent(*value));
                 }
             }
         }
@@ -56,31 +60,19 @@ impl Transport for EmulatedTransport {
         Ok(())
     }
 
-    fn read(&mut self, function: &ReadFunction) -> Result<Box<[u8]>, Self::Error> {
+    fn read<R>(&mut self, function: &ReadFunction<R>) -> Result<<R::DataType as DataType>::Value, Self::Error>
+    where
+        R: Register
+    {
         match function {
-            ReadFunction::InputRegisters(addr, quantity)
-            | ReadFunction::HoldingRegisters(addr, quantity) => {
-                let mut total = 0;
-                let mut bytes = vec![];
+            ReadFunction::InputRegister(register)
+            | ReadFunction::HoldingRegister(register) => {
+                let EmulatedValue { base, function: _ } = self
+                    .addresses
+                    .get(&R::ADDRESS)
+                    .unwrap_or(EmulatedValue::floating());
 
-                for q in 0..*quantity {
-                    let addr = (addr + q) as Address;
-                    let EmulatedValue { base, function: _ } = self.addresses.get(&addr)
-                        .unwrap_or(EmulatedValue::floating());
-
-                    total += base.r#type().size();
-                    match base {
-                        LabJackDataValue::Uint16(v) => bytes.write_u16::<BigEndian>(*v)?,
-                        LabJackDataValue::Uint32(v) => bytes.write_u32::<BigEndian>(*v)?,
-                        LabJackDataValue::Float32(v) => bytes.write_f32::<BigEndian>(*v)?,
-                        LabJackDataValue::Int32(v) => bytes.write_i32::<BigEndian>(*v)?,
-                    }
-                }
-
-                let mut total = vec![total as u8];
-                total.extend(bytes);
-
-                Ok(Box::from(total.as_slice()))
+                <R::DataType as Decode>::try_decode(EmulatedDecoder { value: *base })
             }
         }
     }
@@ -95,7 +87,7 @@ pub struct Emulated;
 impl Connect for Emulated {
     type Transport = EmulatedTransport;
 
-    fn connect(device: LabJackDevice) -> Result<Connection<Self::Transport>, Error> {
-        Ok(Box::new(EmulatedTransport::new(device)))
+    fn connect(device: LabJackDevice) -> Result<Self::Transport, Error> {
+        Ok(EmulatedTransport::new(device))
     }
 }

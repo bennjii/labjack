@@ -5,8 +5,10 @@ use crate::prelude::*;
 pub struct LabJack;
 
 impl LabJack {
-    pub fn discover(device_type: DeviceType, serial_number: LabJackSerialNumber) -> Result<LabJackDevice, Error>
-    {
+    pub fn discover(
+        device_type: DeviceType,
+        serial_number: LabJackSerialNumber,
+    ) -> Result<LabJackDevice, Error> {
         let devices = Discover::search_all()?;
         let serial = serial_number.into();
 
@@ -29,8 +31,7 @@ impl LabJack {
             .ok_or(Error::DeviceNotFound)
     }
 
-    pub fn discover_with_id(id: LabJackSerialNumber) -> Result<LabJackDevice, Error>
-    {
+    pub fn discover_with_id(id: LabJackSerialNumber) -> Result<LabJackDevice, Error> {
         if id.is_emulated() {
             return Ok(LabJackDevice::emulated());
         }
@@ -38,7 +39,9 @@ impl LabJack {
         LabJack::discover(DeviceType::ANY, id)
     }
 
-    pub fn connect<T>(id: impl Into<LabJackSerialNumber>) -> Result<LabJackClient<<T as Connect>::Transport>, Error>
+    pub fn connect<T>(
+        id: impl Into<LabJackSerialNumber>,
+    ) -> Result<LabJackClient<<T as Connect>::Transport>, Error>
     where
         T: Connect,
     {

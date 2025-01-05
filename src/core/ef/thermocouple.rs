@@ -2,6 +2,7 @@
 //! for thermocouples, seen [here](http://myweb.astate.edu/sharan/PMC/Labs/Measuring%20Temperature%20with%20Thermocouples.pdf).
 
 use crate::core::{adc::Adc, dac::Dac};
+use crate::prelude::LabJackDataValue;
 
 pub enum Thermocouple {
     TypeE,
@@ -194,19 +195,20 @@ impl Thermocouple {
 
 impl Adc for Thermocouple {
     type Digital = f64;
-    type Voltage<'a> = f64;
 
-    fn to_digital(&self, voltage: Self::Voltage<'_>) -> Self::Digital {
-        self.temp_from_volt(&voltage)
+    fn to_digital(&self, voltage: LabJackDataValue) -> Self::Digital {
+        self.temp_from_volt(&voltage.as_f64())
     }
 }
 
 impl Dac for Thermocouple {
     type Digital<'a> = &'a f64;
-    type Voltage<'a> = f64;
 
-    fn to_voltage(&self, digital: Self::Digital<'_>) -> Self::Voltage<'_> {
-        self.volt_from_temp(digital)
+    fn to_voltage(&self, digital: Self::Digital<'_>) -> LabJackDataValue {
+        let float = self.volt_from_temp(digital);
+
+        // Finding an appropriate-unit for the value.
+        LabJackDataValue::Float32(float as f32)
     }
 }
 

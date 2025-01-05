@@ -2,6 +2,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 
 use crate::prelude::*;
+use crate::prelude::data_types::Register;
 
 /// Ephemeral structure created from the transport to compose messages. It's internal state is
 /// only of a mutable extension of the [`Transport`] explicitly only containing domain-specific
@@ -46,10 +47,11 @@ impl<'a> Compositor<'a> {
         self.transaction_id
     }
 
-    pub fn compose_read(&mut self, function: &ReadFunction) -> Result<ComposedMessage, Error> {
-        let (addr, count, expected_bytes) = match *function {
-            ReadFunction::HoldingRegisters(a, c) | ReadFunction::InputRegisters(a, c) => {
-                (a, c, 2 * c as usize)
+    pub fn compose_read<R: Register>(&mut self, function: &ReadFunction<R>) -> Result<ComposedMessage, Error> {
+        let (addr, count, expected_bytes) = match function {
+            ReadFunction::HoldingRegister(reg) | ReadFunction::InputRegister(reg) => {
+                let word_size = <R::DataType as DataType>::data_type().size();
+                (R::ADDRESS, word_size, 2 * word_size as usize)
             }
         };
 
@@ -105,11 +107,9 @@ impl<'a> Compositor<'a> {
                 // Cast all registers to U16
                 let as_u16s = values
                     .into_iter()
-                    .map(|v| {
-                        match v {
-                            LabJackDataValue::Uint16(v) => Ok(*v),
-                            _ => Err(Error::InvalidData(Reason::SendBufferTooBig)),
-                        }
+                    .map(|v| match v {
+                        LabJackDataValue::Uint16(v) => Ok(*v),
+                        _ => Err(Error::InvalidData(Reason::SendBufferTooBig)),
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -144,14 +144,14 @@ impl<'a> Compositor<'a> {
         let header = Header::new(self, composed_size as u16);
         let mut content = header.pack()?;
 
-        content.write_u8(Function::Feedback(fns).code())?;
+        content.write_u8(0x4C)?; // 0x4C is Feedback Code
 
         for frame in fns {
             content.write_u8(frame.code())?;
 
             match frame {
                 FeedbackFunction::ReadRegisters(addr, quant) => {
-                    content.write_u16::<BigEndian>(*addr)?;
+                    content.write_u16::<BigEndian>(*addr)?; // TODO: Make trait 16bit so this cast becomes irrelevant.
                     content.write_u8(*quant)?;
                 }
                 FeedbackFunction::WriteRegisters(addr, values) => {

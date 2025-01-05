@@ -1,12 +1,14 @@
-use either::Either;
+use crate::core::data_types::Decode;
+use crate::prelude::data_types::{Coerce, Register};
 use crate::prelude::*;
+use either::Either;
 
 pub struct LabJackClient<T>
 where
     T: Transport,
 {
     pub device: LabJackDevice,
-    transport: Box<dyn Client<Error = T::Error>>,
+    transport: T,
 }
 
 impl<T> LabJackClient<T>
@@ -15,51 +17,49 @@ where
 {
     pub fn new(
         device: LabJackDevice,
-        transport: Box<dyn Client<Error = T::Error>>,
+        transport: T,
     ) -> LabJackClient<T> {
         LabJackClient { device, transport }
     }
 
     /// Reads a singular value from a given address on the LabJack.
-    pub fn read<D>(
+    pub fn read<An, Reg>(
         &mut self,
-        address: LookupTable,
-        channel: D,
-    ) -> Result<<D as Daq>::Digital, Either<Error, <T as Transport>::Error>>
+        address: Reg,
+        channel: An,
+    ) -> Result<<An as Adc>::Digital, Either<Error, <T as Transport>::Error>>
     where
-        D: Daq,
+        An: Adc,
+        Reg: Register,
     {
-        let entity = address.raw();
-        let expected_registers = entity.data_type.size();
-
-        let bytes = self
+        let value = self
             .transport
-            .read(&ReadFunction::InputRegisters(
-                entity.address as u16,
-                entity.data_type.size(),
+            .read::<Reg>(&ReadFunction::InputRegister(
+                address
             ))
             .map_err(|e| Either::Right(e))?;
 
-        let num_registers = bytes[0];
-        println!("Got registers: {}", num_registers);
-        println!("Expected registers: {:?}", expected_registers);
-
-        if num_registers != expected_registers as u8 {
-            return Err(Either::Left(Reason::RegisterMismatch.into()));
-        }
-
-        let value = LabJackDataValue::from_bytes(entity.data_type, &bytes[1..])
-            .map_err(|e| Either::Left(e))?;
-
         // Utilising the ADC functions, so we convert it accordingly.
-        let channel_value = <D as Adc>::Voltage::from(value);
-        Ok(channel.to_digital(channel_value).into())
+        let data = <Reg::DataType as Coerce>::coerce(value);
+        Ok(channel.to_digital(data).into())
+    }
+
+    pub fn read_register<Reg>(
+        &mut self,
+        address: Reg,
+    ) -> Result<<Reg::DataType as DataType>::Value, Either<Error, <T as Transport>::Error>>
+    where
+        Reg: Register,
+    {
+        self
+            .transport
+            .read::<Reg>(&ReadFunction::HoldingRegister(address))
+            .map_err(|e| Either::Right(e))
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::LookupTable::Ain55;
     use crate::prelude::*;
 
     /// A mocked DAQ used to override the values
@@ -68,19 +68,17 @@ mod test {
 
     impl Adc for ButtEnd {
         type Digital = LabJackDataValue;
-        type Voltage<'a> = f64;
 
-        fn to_digital(&self, _voltage: Self::Voltage<'_>) -> Self::Digital {
+        fn to_digital(&self, _voltage: LabJackDataValue) -> Self::Digital {
             self.0
         }
     }
 
     impl Dac for ButtEnd {
         type Digital<'a> = LabJackDataValue;
-        type Voltage<'a> = f64;
 
-        fn to_voltage(&self, _digital: Self::Digital<'_>) -> Self::Voltage<'_> {
-            self.0.as_f64()
+        fn to_voltage(&self, _digital: Self::Digital<'_>) -> LabJackDataValue {
+            self.0
         }
     }
 
@@ -108,11 +106,15 @@ mod test {
         assert!(value.is_ok(), "result={:?}", value);
 
         let value = value.unwrap();
-        assert_eq!(value, 0f64);
+        assert_eq!(value.as_f64(), 0f64);
     }
 
     #[test]
     fn k() {
-        println!("{:?}", Ain55.raw());
+        let mut device =
+            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+
+        let value = device.read_register(Ain55).expect("!");
+        println!("{:?}", value);
     }
 }

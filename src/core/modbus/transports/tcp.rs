@@ -1,3 +1,7 @@
+use crate::core::data_types::Decode;
+use crate::prelude::data_types::{Register, StandardDecoder};
+use crate::prelude::*;
+use either::Either;
 use enum_primitive::FromPrimitive;
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -5,8 +9,6 @@ use std::{
     io::{Read, Write},
     net::{Shutdown, TcpStream},
 };
-
-use crate::prelude::*;
 
 pub const MODBUS_PROTOCOL_TCP: u16 = 0x0000;
 
@@ -134,7 +136,10 @@ impl Transport for TcpTransport {
         }
     }
 
-    fn read(&mut self, function: &ReadFunction) -> Result<Box<[u8]>, Self::Error> {
+    fn read<R>(&mut self, function: &ReadFunction<R>) -> Result<<R::DataType as DataType>::Value, Self::Error>
+    where
+        R: Register
+    {
         let ComposedMessage {
             content,
             header,
@@ -152,7 +157,10 @@ impl Transport for TcpTransport {
 
         TcpTransport::validate_response_header(&header, &resp_hd)?;
         TcpTransport::validate_response_code(&content, &reply)?;
-        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
+
+        let data = TcpTransport::get_reply_data(&reply, expected_bytes)?;
+        // TODO: Check expected length and remove 1.. offset.
+        <R::DataType as Decode>::try_decode(StandardDecoder { bytes: &data[1..] })
     }
 
     fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
@@ -184,7 +192,6 @@ impl Transport for TcpTransport {
 /// // Import prelude items
 /// use labjack::prelude::*;
 /// // Import the specific pin we wish to read
-/// use labjack::prelude::LookupTable::Ain55;
 ///
 /// // Connect to our LabJack over TCP
 /// let mut device = LabJack::connect::<Emulated>(-2).expect("Must connect");
@@ -198,10 +205,10 @@ pub struct Tcp;
 impl Connect for Tcp {
     type Transport = TcpTransport;
 
-    fn connect(device: LabJackDevice) -> Result<Connection<Self::Transport>, Error> {
+    fn connect(device: LabJackDevice) -> Result<Self::Transport, Error> {
         let addr = SocketAddr::new(device.ip_address, MODBUS_COMMUNICATION_PORT);
         let stream = TcpStream::connect(addr).map_err(Error::Io)?;
 
-        Ok(Box::new(TcpTransport::new(stream)))
+        Ok(TcpTransport::new(stream))
     }
 }

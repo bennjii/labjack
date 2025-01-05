@@ -1,4 +1,6 @@
-use crate::prelude::LabJackDataValue;
+use crate::core::DataValue;
+use crate::prelude::{DataType, LabJackDataValue, LabJackEntity};
+use crate::prelude::data_types::Register;
 
 pub type Address = u16;
 pub type Quantity = u16;
@@ -8,27 +10,33 @@ pub enum FeedbackFunction<'a> {
     WriteRegisters(Address, &'a [u8]),
 }
 
-pub enum Function<'a> {
-    Read(ReadFunction),
-    Write(WriteFunction<'a>),
-    Feedback(&'a [FeedbackFunction<'a>]),
-}
-
+// TODO: The addresses are derrived from an entity, this entity will span either a
+//       single or multiple registers. Therefore, prefer simply writing a labjack
+//       entity, with a value.
 pub enum WriteFunction<'a> {
     SingleRegister(Address, LabJackDataValue),
     MultipleRegisters(Address, &'a [LabJackDataValue]),
 }
 
-pub enum ReadFunction {
-    HoldingRegisters(Address, Quantity),
-    InputRegisters(Address, Quantity),
+// Write all registers corresponding to the entity, with given value.
+// Must assert that the entity and value match register variants on types provided.
+// TODO: Can we make this assertion compile-safe?
+pub struct WriteFunction2<R: Register>(R, <R::DataType as DataType>::Value);
+
+// Read all registers corresponding to the entity
+pub struct ReadFunction2<R: Register>(R);
+
+pub enum ReadFunction<R: Register> {
+    HoldingRegister(R),
+    // "Seldom Used". Prefer Holding.
+    InputRegister(R),
 }
 
-impl ReadFunction {
+impl<R> ReadFunction<R> where R: Register {
     pub(crate) fn code(&self) -> u8 {
         match *self {
-            ReadFunction::HoldingRegisters(..) => 0x03,
-            ReadFunction::InputRegisters(..) => 0x04,
+            ReadFunction::HoldingRegister(..) => 0x03,
+            ReadFunction::InputRegister(..) => 0x04,
         }
     }
 }
@@ -38,16 +46,6 @@ impl WriteFunction<'_> {
         match *self {
             WriteFunction::SingleRegister(..) => 0x06,
             WriteFunction::MultipleRegisters(..) => 0x10,
-        }
-    }
-}
-
-impl<'a> Function<'a> {
-    pub(crate) fn code(&self) -> u8 {
-        match self {
-            Function::Read(a) => a.code(),
-            Function::Write(a) => a.code(),
-            Function::Feedback(_) => 0x4C,
         }
     }
 }
