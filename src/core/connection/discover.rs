@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use log::debug;
 
-use crate::prelude::*;
 use crate::prelude::data_types::Register;
+use crate::prelude::*;
 
 pub const BROADCAST_IP: &str = "192.168.255.255";
 pub const MODBUS_FEEDBACK_PORT: u16 = 52362;
@@ -100,12 +100,12 @@ impl Discover {
 
 #[cfg(test)]
 mod test {
+    use crate::prelude::data_types::Register;
     use crate::prelude::{ComposedMessage, ProductId};
     use crate::{
         core::modbus::{Compositor, FeedbackFunction},
         prelude::translate,
     };
-    use crate::prelude::data_types::Register;
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
     //    +--------+  +--+  +  +   +-----------+

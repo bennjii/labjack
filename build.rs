@@ -184,7 +184,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     {content}
                 }}
             }}
-        "#)
+        "#
+        )
         .unwrap();
     }
 

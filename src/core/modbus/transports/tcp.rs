@@ -115,7 +115,10 @@ impl TcpTransport {
 impl Transport for TcpTransport {
     type Error = Error;
 
-    fn write(&mut self, function: &WriteFunction) -> Result<(), Self::Error> {
+    fn write<R>(&mut self, function: &WriteFunction<R>) -> Result<(), Self::Error>
+    where
+        R: Register,
+    {
         let ComposedMessage {
             content, header, ..
         } = self.compositor().compose_write(function)?;
@@ -136,9 +139,12 @@ impl Transport for TcpTransport {
         }
     }
 
-    fn read<R>(&mut self, function: &ReadFunction<R>) -> Result<<R::DataType as DataType>::Value, Self::Error>
+    fn read<R>(
+        &mut self,
+        function: &ReadFunction<R>,
+    ) -> Result<<R::DataType as DataType>::Value, Self::Error>
     where
-        R: Register
+        R: Register,
     {
         let ComposedMessage {
             content,

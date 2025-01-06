@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::core::data_types::{Decode, EmulatedDecoder};
-use crate::prelude::data_types::Register;
+use crate::prelude::data_types::{Coerce, Register};
 
 pub struct EmulatedValue {
     base: LabJackDataValue,
@@ -43,30 +43,25 @@ impl EmulatedTransport {
 impl Transport for EmulatedTransport {
     type Error = Error;
 
-    fn write(&mut self, function: &WriteFunction) -> Result<(), Self::Error> {
-        match function {
-            WriteFunction::SingleRegister(addr, val) => {
-                self.addresses
-                    .insert(*addr, EmulatedValue::transparent(*val));
-            }
-            WriteFunction::MultipleRegisters(addr, values) => {
-                for (index, value) in values.into_iter().enumerate() {
-                    self.addresses
-                        .insert(*addr + index as Address, EmulatedValue::transparent(*value));
-                }
-            }
-        }
-
+    fn write<R>(&mut self, function: &WriteFunction<R>) -> Result<(), Self::Error>
+    where
+        R: Register,
+    {
+        let data_value = <R::DataType as Coerce>::coerce(function.1.clone());
+        self.addresses
+            .insert(R::ADDRESS, EmulatedValue::transparent(data_value));
         Ok(())
     }
 
-    fn read<R>(&mut self, function: &ReadFunction<R>) -> Result<<R::DataType as DataType>::Value, Self::Error>
+    fn read<R>(
+        &mut self,
+        function: &ReadFunction<R>,
+    ) -> Result<<R::DataType as DataType>::Value, Self::Error>
     where
-        R: Register
+        R: Register,
     {
         match function {
-            ReadFunction::InputRegister(register)
-            | ReadFunction::HoldingRegister(register) => {
+            ReadFunction::InputRegister(register) | ReadFunction::HoldingRegister(register) => {
                 let EmulatedValue { base, function: _ } = self
                     .addresses
                     .get(&R::ADDRESS)

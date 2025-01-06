@@ -7,8 +7,13 @@ use crate::prelude::{FeedbackFunction, LabJackDataValue, WriteFunction};
 pub trait Transport {
     type Error: From<std::io::Error> + Sized;
 
-    fn write(&mut self, function: &WriteFunction) -> Result<(), Self::Error>;
-    fn read<R>(&mut self, function: &ReadFunction<R>) -> Result<<R::DataType as DataType>::Value, Self::Error>
+    fn write<R>(&mut self, function: &WriteFunction<R>) -> Result<(), Self::Error>
+    where
+        R: Register;
+    fn read<R>(
+        &mut self,
+        function: &ReadFunction<R>,
+    ) -> Result<<R::DataType as DataType>::Value, Self::Error>
     where
         R: Register;
     // TODO: Return type should be feedback values not bytes

@@ -15,10 +15,7 @@ impl<T> LabJackClient<T>
 where
     T: Transport,
 {
-    pub fn new(
-        device: LabJackDevice,
-        transport: T,
-    ) -> LabJackClient<T> {
+    pub fn new(device: LabJackDevice, transport: T) -> LabJackClient<T> {
         LabJackClient { device, transport }
     }
 
@@ -34,9 +31,7 @@ where
     {
         let value = self
             .transport
-            .read::<Reg>(&ReadFunction::InputRegister(
-                address
-            ))
+            .read::<Reg>(&ReadFunction::InputRegister(address))
             .map_err(|e| Either::Right(e))?;
 
         // Utilising the ADC functions, so we convert it accordingly.
@@ -51,8 +46,7 @@ where
     where
         Reg: Register,
     {
-        self
-            .transport
+        self.transport
             .read::<Reg>(&ReadFunction::HoldingRegister(address))
             .map_err(|e| Either::Right(e))
     }

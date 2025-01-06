@@ -1,8 +1,8 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 
-use crate::prelude::*;
 use crate::prelude::data_types::Register;
+use crate::prelude::*;
 
 /// Ephemeral structure created from the transport to compose messages. It's internal state is
 /// only of a mutable extension of the [`Transport`] explicitly only containing domain-specific
@@ -47,7 +47,10 @@ impl<'a> Compositor<'a> {
         self.transaction_id
     }
 
-    pub fn compose_read<R: Register>(&mut self, function: &ReadFunction<R>) -> Result<ComposedMessage, Error> {
+    pub fn compose_read<R: Register>(
+        &mut self,
+        function: &ReadFunction<R>,
+    ) -> Result<ComposedMessage, Error> {
         let (addr, count, expected_bytes) = match function {
             ReadFunction::HoldingRegister(reg) | ReadFunction::InputRegister(reg) => {
                 let word_size = <R::DataType as DataType>::data_type().size();
@@ -65,7 +68,7 @@ impl<'a> Compositor<'a> {
 
         // The length in a feedback function might be different if
         // using a different frame type.
-        let header = Header::new(self, MODBUS_HEADER_SIZE as u16 + 6u16);
+        let header = Header::new(self, 6u16);
         let mut content = header.pack()?;
 
         content.write_u8(function.code())?;
@@ -80,52 +83,32 @@ impl<'a> Compositor<'a> {
         })
     }
 
-    pub fn compose_write(&mut self, function: &WriteFunction) -> Result<ComposedMessage, Error> {
-        let size = match function {
-            WriteFunction::SingleRegister(..) => 5,
-            WriteFunction::MultipleRegisters(.., bytes) => 6 + bytes.len(),
-        };
+    pub fn compose_write<R: Register>(
+        &mut self,
+        function: &WriteFunction<R>,
+    ) -> Result<ComposedMessage, Error> {
+        let size = <R::DataType as DataType>::data_type().size();
+        let bytes = size * 2;
 
-        let header = Header::new(self, size as u16 + 1u16);
+        let header = Header::new(self, bytes + MODBUS_HEADER_SIZE as u16);
         let mut content = header.pack()?;
+
         content.write_u8(function.code())?;
+        content.write_u16::<BigEndian>(R::ADDRESS)?;
+        content.write_u16::<BigEndian>(size)?;
 
-        match *function {
-            WriteFunction::SingleRegister(addr, value) => {
-                content.write_u16::<BigEndian>(addr)?;
+        let bytes = <R::DataType as DataType>::bytes(&function.1);
+        content.write_u8(bytes.len() as u8)?;
 
-                match value {
-                    LabJackDataValue::Uint16(val) => content.write_u16::<BigEndian>(val)?,
-                    // Registers are only U16.
-                    _ => return Err(Error::InvalidData(Reason::SendBufferTooBig)),
-                }
-            }
-            WriteFunction::MultipleRegisters(addr, values) => {
-                content.write_u16::<BigEndian>(addr)?;
-                content.write_u16::<BigEndian>(values.len() as u16)?;
-
-                // Cast all registers to U16
-                let as_u16s = values
-                    .into_iter()
-                    .map(|v| match v {
-                        LabJackDataValue::Uint16(v) => Ok(*v),
-                        _ => Err(Error::InvalidData(Reason::SendBufferTooBig)),
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-
-                let bytes = unpack_bytes(as_u16s.as_slice());
-                content.write_u8(bytes.len() as u8)?;
-
-                for v in bytes {
-                    content.write_u8(v)?;
-                }
-            }
+        for v in bytes {
+            content.write_u8(v)?;
         }
 
         Ok(ComposedMessage {
             content,
             header,
-            expected_bytes: 0usize,
+            // Device will relay starting address and num. registers.
+            expected_bytes: 4usize,
         })
     }
 
@@ -177,7 +160,7 @@ impl Header {
         Header {
             transaction_id: *compositor.new_tid(),
             protocol_id: MODBUS_PROTOCOL_TCP,
-            length: len - MODBUS_HEADER_SIZE as u16,
+            length: len,
             unit_id: compositor.unit_id,
         }
     }
@@ -199,5 +182,132 @@ impl Header {
             length: rdr.read_u16::<BigEndian>()?,
             unit_id: rdr.read_u8()?,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::prelude::data_types::Register;
+    use crate::prelude::*;
+
+    #[test]
+    fn write_standard() {
+        let mut transaction_id = 1;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let register = Ain55;
+        let write_function = WriteFunction(register, 16f32);
+        let ComposedMessage { content, .. } = compositor
+            .compose_write(&write_function)
+            .expect("Must-compose");
+
+        let spanning_registers = <Ain55 as Register>::DataType::data_type().size();
+        let expected_size = (2 * spanning_registers);
+
+        println!("{:?}", content);
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
+        assert_eq!([0x00, 0x00], content[2..4]); // ProtocolID
+        assert_eq!((expected_size + 7).to_be_bytes(), content[4..6]); // Length (MSB-LSB)
+        assert_eq!([MODBUS_UNIT_ID, 0x10], content[6..8]); // UnitID & Write Function Code
+        assert_eq!(Ain55::ADDRESS.to_be_bytes(), content[8..10]);
+        assert_eq!(spanning_registers.to_be_bytes(), content[10..12]);
+        assert_eq!(expected_size as u8, content[12]);
+
+        // Assert data values are correct.
+    }
+
+    /// Validating the exemplar command given in the documentation
+    ///
+    /// [LabJack Reference Documentation](https://support.labjack.com/docs/protocol-details-direct-modbus-tcp#ProtocolDetails[DirectModbusTCP]-WriteDAC0)
+    #[test]
+    fn write_dac_zero() {
+        let mut transaction_id = 1;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let write_function = WriteFunction(Dac0, 3.3f32);
+        let ComposedMessage { content, .. } = compositor
+            .compose_write(&write_function)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
+        assert_eq!(
+            [
+                0x00, 0x00, 0x00, 0x0B, 0x01, 0x10, 0x03, 0xE8, 0x00, 0x02, 0x04, 0x40, 0x53, 0x33,
+                0x33
+            ],
+            content[2..]
+        );
+    }
+
+    #[test]
+    fn write_test_u32() {
+        let mut transaction_id = 1;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let write_function = WriteFunction(TestUint32, 0xC0BCCCCD);
+        let ComposedMessage { content, .. } = compositor
+            .compose_write(&write_function)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
+        assert_eq!(
+            [
+                0x00, 0x00, 0x00, 0x0B, 0x01, 0x10, 0xD7, 0x50, 0x00, 0x02, 0x04, 0xC0, 0xBC, 0xCC,
+                0xCD
+            ],
+            content[2..]
+        );
+    }
+
+    #[test]
+    fn read_test_u32() {
+        let mut transaction_id = 1;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let read_function = ReadFunction::HoldingRegister(TestUint32);
+        let ComposedMessage { content, .. } = compositor
+            .compose_read(&read_function)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
+        assert_eq!(
+            [0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0xD7, 0x50, 0x00, 0x02],
+            content[2..]
+        );
+    }
+
+    #[test]
+    fn read_test_u16() {
+        let mut transaction_id = 1;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let read_function = ReadFunction::HoldingRegister(TestUint16);
+        let ComposedMessage { content, .. } = compositor
+            .compose_read(&read_function)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
+        assert_eq!(
+            [0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0xD7, 0x46, 0x00, 0x01],
+            content[2..]
+        );
+    }
+
+    #[test]
+    fn read_fio_zero() {
+        let mut transaction_id = 1;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let read_function = ReadFunction::HoldingRegister(Fio0);
+        let ComposedMessage { content, .. } = compositor
+            .compose_read(&read_function)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
+        assert_eq!(
+            [0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x07, 0xD0, 0x00, 0x01],
+            content[2..]
+        );
     }
 }

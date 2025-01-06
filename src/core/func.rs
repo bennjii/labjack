@@ -22,12 +22,13 @@ pub trait DataType: Debug {
     type Value: FromPrimitive + ToPrimitive + Clone + Debug;
 
     fn data_type() -> LabJackDataType;
+    fn bytes(value: &Self::Value) -> Vec<u8>;
 }
 
 pub mod data_types {
-    use num::FromPrimitive;
     use crate::core::{DataType, LabJackDataType, LabJackDataValue, Reason};
     use crate::prelude::{Error, LabJackEntity};
+    use num::FromPrimitive;
     use serde::{Deserialize, Serialize};
 
     macro_rules! impl_traits {
@@ -47,6 +48,10 @@ pub mod data_types {
 
                     fn data_type() -> LabJackDataType {
                         LabJackDataType::$struct
+                    }
+
+                    fn bytes(value: &<$struct as DataType>::Value) -> Vec<u8> {
+                        value.to_be_bytes().to_vec()
                     }
                 }
             )*
@@ -81,7 +86,7 @@ pub mod data_types {
     }
 
     pub struct EmulatedDecoder {
-        pub value: LabJackDataValue
+        pub value: LabJackDataValue,
     }
 
     impl Decoder for EmulatedDecoder {
@@ -98,7 +103,10 @@ pub mod data_types {
         }
     }
 
-    impl<T> Decode for T where T: Coerce {
+    impl<T> Decode for T
+    where
+        T: Coerce,
+    {
         fn try_decode<D: Decoder>(v: D) -> Result<T::Value, Error> {
             v.decode_primitive::<T::Value>()
         }
@@ -144,7 +152,7 @@ pub enum LabJackDataValue {
     Int32(i32),
     Float32(f32),
     Byte(u8),
-    String(f32) // Make string
+    String(f32), // Make string
 }
 
 impl From<LabJackDataValue> for f64 {
@@ -186,18 +194,18 @@ impl LabJackDataValue {
                     .try_into()
                     .map_err(|_| Error::InvalidData(Reason::DecodingError))?,
             )
-            .to_u64(),
+            .to_f64(),
             4 => u32::from_be_bytes(
                 bytes
                     .try_into()
                     .map_err(|_| Error::InvalidData(Reason::DecodingError))?,
             )
-            .to_u64(),
+            .to_f64(),
             _ => None,
         };
 
         be_value
-            .and_then(T::from_u64)
+            .and_then(T::from_f64)
             .ok_or(Error::InvalidData(Reason::DecodingError))
     }
 
