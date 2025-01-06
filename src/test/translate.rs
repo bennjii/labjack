@@ -3,9 +3,6 @@ use crate::prelude::*;
 
 #[test]
 pub fn assert_correct_address() {
-    assert_eq!(Ain55::ADDRESS, 110);
-    assert_eq!(
-        <<Ain55 as Register>::DataType as DataType>::data_type(),
-        LabJackDataType::Float32
-    );
+    assert_eq!(Ain55.address(), 110);
+    assert_eq!(Ain55.data_type().data_type(), LabJackDataType::Float32);
 }

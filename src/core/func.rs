@@ -21,13 +21,13 @@ pub enum LabJackDataType {
 pub trait DataType: Debug {
     type Value: FromPrimitive + ToPrimitive + Clone + Debug;
 
-    fn data_type() -> LabJackDataType;
-    fn bytes(value: &Self::Value) -> Vec<u8>;
+    fn data_type(&self) -> LabJackDataType;
+    fn bytes(&self, value: &Self::Value) -> Vec<u8>;
 }
 
 pub mod data_types {
-    use crate::core::{DataType, LabJackDataType, LabJackDataValue, Reason};
-    use crate::prelude::{Error, LabJackEntity};
+    use crate::core::{DataType, LabJackDataType, LabJackDataValue, Quantity, Reason};
+    use crate::prelude::{Address, Error, LabJackEntity};
     use num::FromPrimitive;
     use serde::{Deserialize, Serialize};
 
@@ -46,11 +46,11 @@ pub mod data_types {
                 impl DataType for $struct {
                     type Value = $value;
 
-                    fn data_type() -> LabJackDataType {
+                    fn data_type(&self) -> LabJackDataType {
                         LabJackDataType::$struct
                     }
 
-                    fn bytes(value: &<$struct as DataType>::Value) -> Vec<u8> {
+                    fn bytes(&self, value: &<$struct as DataType>::Value) -> Vec<u8> {
                         value.to_be_bytes().to_vec()
                     }
                 }
@@ -114,10 +114,24 @@ pub mod data_types {
 
     pub trait Register {
         type DataType: Decode;
-        const NAME: &'static str;
-        const ADDRESS: u16;
+        // const NAME: &'static str;
+        // const ADDRESS: u16;
 
-        fn entity() -> LabJackEntity<<Self as Register>::DataType>;
+        fn data_type(&self) -> Self::DataType;
+
+        fn entity(&self) -> LabJackEntity<<Self as Register>::DataType>;
+
+        fn width(&self) -> Quantity {
+            self.data_type().data_type().size()
+        }
+
+        fn address(&self) -> Address;
+
+        fn name(&self) -> &'static str;
+
+        fn bytes(&self, value: &<Self::DataType as DataType>::Value) -> Vec<u8> {
+            self.data_type().bytes(value)
+        }
     }
 }
 

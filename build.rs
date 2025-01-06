@@ -177,11 +177,21 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             impl crate::prelude::data_types::Register for {key} {{
                 type DataType = {dt};
-                const NAME: &'static str = "{key}";
-                const ADDRESS: u16 = {addr};
 
-                fn entity() -> crate::core::LabJackEntity<Self::DataType> {{
+                fn data_type(&self) -> Self::DataType {{
+                    {dt}
+                }}
+
+                fn entity(&self) -> crate::core::LabJackEntity<Self::DataType> {{
                     {content}
+                }}
+
+                fn name(&self) -> &'static str {{
+                    "{key}"
+                }}
+
+                fn address(&self) -> u16 {{
+                    {addr}
                 }}
             }}
         "#

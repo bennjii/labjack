@@ -12,27 +12,17 @@ pub enum FeedbackFunction<'a> {
 
 // Write all registers corresponding to the entity, with given value.
 // Must assert that the entity and value match register variants on types provided.
-// TODO: Can we make this assertion compile-safe?
 pub struct WriteFunction<R: Register>(pub R, pub <R::DataType as DataType>::Value);
 
 // Read all registers corresponding to the entity
-pub struct ReadFunction2<R: Register>(R);
-
-pub enum ReadFunction<R: Register> {
-    HoldingRegister(R),
-    // "Seldom Used". Prefer Holding.
-    InputRegister(R),
-}
+pub struct ReadFunction<R: Register>(pub R);
 
 impl<R> ReadFunction<R>
 where
     R: Register,
 {
     pub(crate) fn code(&self) -> u8 {
-        match *self {
-            ReadFunction::HoldingRegister(..) => 0x03,
-            ReadFunction::InputRegister(..) => 0x04,
-        }
+        0x03 // 3
     }
 }
 
@@ -41,19 +31,15 @@ where
     R: Register,
 {
     pub(crate) fn code(&self) -> u8 {
-        0x10
-        // match *self {
-        //     WriteFunction::SingleRegister(..) => 0x06,
-        //     WriteFunction::MultipleRegisters(..) => 0x10,
-        // }
+        0x10 // 16
     }
 }
 
-impl<'a> FeedbackFunction<'a> {
+impl FeedbackFunction<'_> {
     pub(crate) fn code(&self) -> u8 {
         match *self {
-            FeedbackFunction::ReadRegisters(_, _) => 0x00,
-            FeedbackFunction::WriteRegisters(_, _) => 0x01,
+            FeedbackFunction::ReadRegisters(..) => 0x00,
+            FeedbackFunction::WriteRegisters(..) => 0x01,
         }
     }
 }

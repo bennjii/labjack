@@ -13,7 +13,7 @@ pub trait Client: Transport {
     where
         Reg: Register,
     {
-        self.read::<Reg>(&ReadFunction::HoldingRegister(register))
+        self.read::<Reg>(&ReadFunction(register))
     }
 
     fn write_register<Reg>(

@@ -27,11 +27,8 @@ impl Discover {
         let mut transaction_id = 0;
         let mut compositor = Compositor::new(&mut transaction_id, 1);
 
-        let product_id_addr = ProductId::ADDRESS;
-        let serial_number_addr = SerialNumber::ADDRESS;
-
-        let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
-        let read_serial_number = FeedbackFunction::ReadRegisters(serial_number_addr, 2);
+        let read_product_id = FeedbackFunction::ReadRegisters(ProductId.address(), 2);
+        let read_serial_number = FeedbackFunction::ReadRegisters(SerialNumber.address(), 2);
 
         let ComposedMessage { content, .. } =
             compositor.compose_feedback(&[read_product_id, read_serial_number])?;
@@ -118,9 +115,9 @@ mod test {
     fn feedback_function() {
         let mut transaction_id: u16 = 0;
         let mut compositor = Compositor::new(&mut transaction_id, 1);
-        let product_id_addr = ProductId::ADDRESS;
+        let product_id_addr = ProductId.address();
 
-        let read_product_id = FeedbackFunction::ReadRegisters(product_id_addr, 2);
+        let read_product_id = FeedbackFunction::ReadRegisters(ProductId.address(), 2);
         let ComposedMessage { content, .. } = compositor
             .compose_feedback(&[read_product_id])
             .expect("Could not compose ModbusFeedback message");

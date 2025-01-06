@@ -49,7 +49,7 @@ impl Transport for EmulatedTransport {
     {
         let data_value = <R::DataType as Coerce>::coerce(function.1.clone());
         self.addresses
-            .insert(R::ADDRESS, EmulatedValue::transparent(data_value));
+            .insert(function.0.address(), EmulatedValue::transparent(data_value));
         Ok(())
     }
 
@@ -61,10 +61,10 @@ impl Transport for EmulatedTransport {
         R: Register,
     {
         match function {
-            ReadFunction::InputRegister(register) | ReadFunction::HoldingRegister(register) => {
+            ReadFunction(reg) => {
                 let EmulatedValue { base, function: _ } = self
                     .addresses
-                    .get(&R::ADDRESS)
+                    .get(&reg.address())
                     .unwrap_or(EmulatedValue::floating());
 
                 <R::DataType as Decode>::try_decode(EmulatedDecoder { value: *base })
@@ -72,8 +72,8 @@ impl Transport for EmulatedTransport {
         }
     }
 
-    fn feedback(&mut self, _data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
-        unimplemented!()
+    fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
+        todo!()
     }
 }
 

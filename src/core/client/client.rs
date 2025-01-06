@@ -29,13 +29,9 @@ where
         An: Adc,
         Reg: Register,
     {
-        let value = self
-            .transport
-            .read::<Reg>(&ReadFunction::InputRegister(address))
-            .map_err(|e| Either::Right(e))?;
-
-        // Utilising the ADC functions, so we convert it accordingly.
+        let value = self.read_register(address)?;
         let data = <Reg::DataType as Coerce>::coerce(value);
+
         Ok(channel.to_digital(data).into())
     }
 
@@ -47,7 +43,7 @@ where
         Reg: Register,
     {
         self.transport
-            .read::<Reg>(&ReadFunction::HoldingRegister(address))
+            .read_register(address)
             .map_err(|e| Either::Right(e))
     }
 }
