@@ -103,11 +103,12 @@ mod test {
         core::modbus::{Compositor, FeedbackFunction},
         prelude::translate,
     };
+
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
     //    +--------+  +--+  +  +   +-----------+
     // => 0, 1, 0, 0, 0, 6, 1, 76, 64, 224, 0, 0
-    // Therefore, we recieve: [64, 224, 0, 0].
+    // Therefore, we receive: [64, 224, 0, 0].
     // That is: 0x40E00000 = 1088421888
     // Which is the LabJack Product ID.
 

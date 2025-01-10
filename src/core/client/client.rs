@@ -1,7 +1,10 @@
-use crate::core::data_types::Decode;
-use crate::prelude::data_types::{Coerce, Register};
+use crate::prelude::data_types::{Coerce, Decode, Register};
+
 use crate::prelude::*;
 use either::Either;
+use enum_primitive::FromPrimitive;
+use std::any::Any;
+use std::marker::PhantomData;
 
 pub struct LabJackClient<T>
 where
@@ -20,17 +23,16 @@ where
     }
 
     /// Reads a singular value from a given address on the LabJack.
-    pub fn read<An, Reg>(
+    pub fn read<An>(
         &mut self,
-        address: Reg,
+        address: LookupTable, // &dyn Register<DataType = dyn Decode<Value = dyn FromPrimitive>>,
         channel: An,
     ) -> Result<<An as Adc>::Digital, Either<Error, <T as Transport>::Error>>
     where
         An: Adc,
-        Reg: Register,
     {
-        let value = self.read_register(address)?;
-        let data = <Reg::DataType as Coerce>::coerce(value);
+        let value = self.read_register(&address.register())?;
+        let data = address.register().data_type().coerce(value);
 
         Ok(channel.to_digital(data).into())
     }
@@ -50,7 +52,9 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::prelude::data_types::{Float32, Register};
     use crate::prelude::*;
+    use std::any::Any;
 
     /// A mocked DAQ used to override the values
     /// provided by conversions to test how the unit value operates.
@@ -78,7 +82,7 @@ mod test {
             LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
         let end = ButtEnd(LabJackDataValue::Uint16(100));
-        let value = device.read(Ain55, end);
+        let value = device.read(LookupTable::Ain55, end);
 
         assert!(value.is_ok(), "result={:?}", value);
 
@@ -91,7 +95,7 @@ mod test {
         let mut device =
             LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
-        let value = device.read(Ain55, ());
+        let value = device.read(LookupTable::Ain55, ());
 
         assert!(value.is_ok(), "result={:?}", value);
 
@@ -100,11 +104,55 @@ mod test {
     }
 
     #[test]
-    fn k() {
+    fn read_singular() {
         let mut device =
             LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
         let value = device.read_register(Ain55).expect("!");
         println!("{:?}", value);
+    }
+
+    #[test]
+    fn read_many() {
+        let mut device =
+            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+
+        // Static-Typing will only go so far.
+        //
+        // See the below where we can aggregate on registers with a common data type.
+        // We could not perform this same aggregation if there would be a discrepancy
+        // in their data types. For that, we would need a layer of indirection and an
+        // aggregated type to represent the multi-typed result.
+
+        // let registers: Vec<&dyn Register<DataType = Float32>> = vec![&Ain55, &Ain56];
+        //
+        // for register in registers {
+        //     let value = device.read_register(&register).expect("!");
+        //     println!("{:?}", value);
+        // }
+    }
+
+    #[test]
+    fn read_many_indirected() {
+        let mut device =
+            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+
+        // We can opt for indirection, through use of enumerations.
+        // Meaning, we specify the `LookupTable` entry, which is Sized
+        // and can therefore group any differently-sized registers together
+        // and read them all back into data value (enumerated) variants.
+        let registers = vec![LookupTable::Ain55, LookupTable::Ain56];
+
+        for register in registers.into_iter() {
+            let value = device.read(register, ()).expect("!");
+            println!("{:?}", value);
+
+            // But if we needed to unionise the values
+            // into some specific target type, we can simply
+            // implement that for the data value.
+            //
+            // For example, the `as_f64` method...
+            println!("AsF64={}", value.as_f64())
+        }
     }
 }

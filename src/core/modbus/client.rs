@@ -1,4 +1,4 @@
-use crate::core::data_types::{Decode, Register};
+use crate::core::data_types::Register;
 use crate::prelude::*;
 
 pub const MODBUS_UNIT_ID: u8 = 1;

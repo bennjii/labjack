@@ -1,7 +1,6 @@
 use crate::core::data_types::Decode;
 use crate::prelude::data_types::{Register, StandardDecoder};
 use crate::prelude::*;
-use either::Either;
 use enum_primitive::FromPrimitive;
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -165,30 +164,34 @@ impl Transport for TcpTransport {
         TcpTransport::validate_response_code(&content, &reply)?;
 
         let data = TcpTransport::get_reply_data(&reply, expected_bytes)?;
+        function
+            .0
+            .data_type()
+            .try_decode(&StandardDecoder { bytes: &data[1..] })
         // TODO: Check expected length and remove 1.. offset.
-        <R::DataType as Decode>::try_decode(StandardDecoder { bytes: &data[1..] })
+        // <R::DataType as Decode>::try_decode(StandardDecoder { bytes: &data[1..] })
     }
 
-    fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
-        let ComposedMessage {
-            content,
-            header,
-            expected_bytes,
-        } = self.compositor().compose_feedback(data)?;
-        let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
-
-        self.stream.write_all(&content).map_err(Error::Io)?;
-        self.stream.read(&mut reply).map_err(Error::Io)?;
-
-        let reply_header_raw = &reply
-            .get(..MODBUS_HEADER_SIZE)
-            .ok_or(Error::InvalidResponse)?;
-        let resp_hd = Header::unpack(reply_header_raw)?;
-
-        TcpTransport::validate_response_header(&header, &resp_hd)?;
-        TcpTransport::validate_response_code(&content, &reply)?;
-        TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
-    }
+    // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
+    //     let ComposedMessage {
+    //         content,
+    //         header,
+    //         expected_bytes,
+    //     } = self.compositor().compose_feedback(data)?;
+    //     let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
+    //
+    //     self.stream.write_all(&content).map_err(Error::Io)?;
+    //     self.stream.read(&mut reply).map_err(Error::Io)?;
+    //
+    //     let reply_header_raw = &reply
+    //         .get(..MODBUS_HEADER_SIZE)
+    //         .ok_or(Error::InvalidResponse)?;
+    //     let resp_hd = Header::unpack(reply_header_raw)?;
+    //
+    //     TcpTransport::validate_response_header(&header, &resp_hd)?;
+    //     TcpTransport::validate_response_code(&content, &reply)?;
+    //     TcpTransport::get_reply_data(&reply, expected_bytes).map(Box::from)
+    // }
 }
 
 /// The TCP ModBus client.
@@ -202,9 +205,9 @@ impl Transport for TcpTransport {
 /// // Connect to our LabJack over TCP
 /// let mut device = LabJack::connect::<Emulated>(-2).expect("Must connect");
 /// // Read the AIN55 pin without an extended feature
-/// let voltage = device.read(Ain55, ()).expect("Must read");
+/// let voltage = device.read_register(Ain55).expect("Must read");
 ///
-/// println!("Voltage={}", voltage);
+/// println!("Voltage(f32)={}", voltage);
 /// ```
 pub struct Tcp;
 

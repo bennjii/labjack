@@ -7,6 +7,7 @@ pub mod ef;
 pub mod func;
 pub mod modbus;
 pub mod sets;
+pub mod data_types;
 
 pub use client::*;
 pub use connection::*;
@@ -16,3 +17,4 @@ pub use dist::*;
 pub use func::*;
 pub use modbus::*;
 pub use sets::*;
+pub use data_types::*;

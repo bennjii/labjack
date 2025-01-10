@@ -2,11 +2,12 @@ use crate::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::core::data_types::{Decode, EmulatedDecoder};
+use crate::core::data_types::{Decode, EmulatedDecoder, StandardDecoder};
 use crate::prelude::data_types::{Coerce, Register};
 
 pub struct EmulatedValue {
     base: LabJackDataValue,
+    #[allow(dead_code)]
     function: fn(LabJackDataValue, Duration) -> LabJackDataValue,
 }
 
@@ -47,7 +48,8 @@ impl Transport for EmulatedTransport {
     where
         R: Register,
     {
-        let data_value = <R::DataType as Coerce>::coerce(function.1.clone());
+        let data_value = function.0.data_type().coerce(function.1.clone());
+        // let data_value = <R::DataType as Coerce>::coerce(function.1.clone());
         self.addresses
             .insert(function.0.address(), EmulatedValue::transparent(data_value));
         Ok(())
@@ -67,14 +69,18 @@ impl Transport for EmulatedTransport {
                     .get(&reg.address())
                     .unwrap_or(EmulatedValue::floating());
 
-                <R::DataType as Decode>::try_decode(EmulatedDecoder { value: *base })
+                function
+                    .0
+                    .data_type()
+                    .try_decode(&EmulatedDecoder { value: *base })
+                // <R::DataType as Decode>::try_decode(EmulatedDecoder { value: *base })
             }
         }
     }
 
-    fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
-        todo!()
-    }
+    // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
+    //     todo!()
+    // }
 }
 
 pub struct Emulated;

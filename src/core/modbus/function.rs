@@ -1,42 +1,40 @@
-use crate::core::DataValue;
 use crate::prelude::data_types::Register;
-use crate::prelude::{DataType, LabJackDataValue, LabJackEntity};
+use crate::prelude::{DataType, LabJackDataValue};
 
 pub type Address = u16;
 pub type Quantity = u16;
 
-pub enum FeedbackFunction<'a> {
-    ReadRegisters(Address, u8),
-    WriteRegisters(Address, &'a [u8]),
+pub enum FeedbackFunction {
+    ReadRegisters(Vec<(Register, LabJackDataValue)>),
+    WriteRegisters(Vec<(Register, LabJackDataValue)>),
 }
 
-// Write all registers corresponding to the entity, with given value.
-// Must assert that the entity and value match register variants on types provided.
-pub struct WriteFunction<R: Register>(pub R, pub <R::DataType as DataType>::Value);
+/// Write all registers corresponding to the entity, with given value.
+/// Must assert that the entity and value match register variants on types provided.
+pub struct WriteFunction(pub Register, pub LabJackDataValue);
 
-// Read all registers corresponding to the entity
-pub struct ReadFunction<R: Register>(pub R);
+/// Read all registers corresponding to the entity.
+pub struct ReadFunction(pub Register);
 
-impl<R> ReadFunction<R>
-where
-    R: Register,
-{
-    pub(crate) fn code(&self) -> u8 {
-        0x03 // 3
+trait Function {
+    fn code(&self) -> u8;
+}
+
+
+impl Function for ReadFunction {
+    fn code(&self) -> u8 {
+        0x03
     }
 }
 
-impl<R> WriteFunction<R>
-where
-    R: Register,
-{
-    pub(crate) fn code(&self) -> u8 {
+impl Function for WriteFunction {
+    fn code(&self) -> u8 {
         0x10 // 16
     }
 }
 
-impl FeedbackFunction<'_> {
-    pub(crate) fn code(&self) -> u8 {
+impl Function for FeedbackFunction {
+    fn code(&self) -> u8 {
         match *self {
             FeedbackFunction::ReadRegisters(..) => 0x00,
             FeedbackFunction::WriteRegisters(..) => 0x01,

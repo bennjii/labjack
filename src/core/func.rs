@@ -1,10 +1,8 @@
-use crate::core::func::data_types::*;
 use crate::prelude::modbus::{Error, Quantity, Reason};
-use crate::prelude::translate::LookupTable;
+
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
-use std::marker::PhantomData;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -25,116 +23,6 @@ pub trait DataType: Debug {
     fn bytes(&self, value: &Self::Value) -> Vec<u8>;
 }
 
-pub mod data_types {
-    use crate::core::{DataType, LabJackDataType, LabJackDataValue, Quantity, Reason};
-    use crate::prelude::{Address, Error, LabJackEntity};
-    use num::FromPrimitive;
-    use serde::{Deserialize, Serialize};
-
-    macro_rules! impl_traits {
-        ($($struct:ident => $value:ty),* $(,)?) => {
-            $(
-                #[derive(Debug, Clone, Serialize, Deserialize)]
-                pub struct $struct;
-
-                impl Coerce for $struct {
-                    fn coerce(value: <$struct as DataType>::Value) -> LabJackDataValue {
-                        LabJackDataValue::$struct(value)
-                    }
-                }
-
-                impl DataType for $struct {
-                    type Value = $value;
-
-                    fn data_type(&self) -> LabJackDataType {
-                        LabJackDataType::$struct
-                    }
-
-                    fn bytes(&self, value: &<$struct as DataType>::Value) -> Vec<u8> {
-                        value.to_be_bytes().to_vec()
-                    }
-                }
-            )*
-        };
-    }
-
-    /// Allows for upcasting a given primitive into a [`LabJackDataValue`]
-    /// for intermediary handling of unknown/aggregated data instances.
-    pub trait Coerce: DataType {
-        fn coerce(value: <Self as DataType>::Value) -> LabJackDataValue; // Must not fail, ever.
-    }
-
-    impl_traits! {
-        Uint16 => u16,
-        Uint32 => u32,
-        Uint64 => u64,
-        Int32 => i32,
-        Float32 => f32,
-        Byte => u8,
-    }
-
-    trait Decoder {
-        fn decode_primitive<F: FromPrimitive>(&self) -> Result<F, Error>;
-    }
-
-    pub trait Decode: Coerce {
-        fn try_decode<D: Decoder>(v: D) -> Result<<Self as DataType>::Value, Error>;
-    }
-
-    pub struct StandardDecoder<'a> {
-        pub bytes: &'a [u8],
-    }
-
-    pub struct EmulatedDecoder {
-        pub value: LabJackDataValue,
-    }
-
-    impl Decoder for EmulatedDecoder {
-        fn decode_primitive<F: FromPrimitive>(&self) -> Result<F, Error> {
-            // Apply indirection
-            let as_f64 = self.value.as_f64();
-            F::from_f64(as_f64).ok_or(Error::InvalidData(Reason::DecodingError))
-        }
-    }
-
-    impl Decoder for StandardDecoder<'_> {
-        fn decode_primitive<F: FromPrimitive>(&self) -> Result<F, Error> {
-            LabJackDataValue::decode_bytes::<F>(self.bytes)
-        }
-    }
-
-    impl<T> Decode for T
-    where
-        T: Coerce,
-    {
-        fn try_decode<D: Decoder>(v: D) -> Result<T::Value, Error> {
-            v.decode_primitive::<T::Value>()
-        }
-    }
-
-    pub trait Register {
-        type DataType: Decode;
-        // const NAME: &'static str;
-        // const ADDRESS: u16;
-
-        fn data_type(&self) -> Self::DataType;
-
-        fn entity(&self) -> LabJackEntity<<Self as Register>::DataType>;
-
-        fn width(&self) -> Quantity {
-            self.data_type().data_type().size()
-        }
-
-        fn address(&self) -> Address;
-
-        fn name(&self) -> &'static str;
-
-        fn bytes(&self, value: &<Self::DataType as DataType>::Value) -> Vec<u8> {
-            self.data_type().bytes(value)
-        }
-    }
-}
-
 impl LabJackDataType {
     /// Determines the LabJack size representation over ModBus.
     ///
@@ -147,7 +35,8 @@ impl LabJackDataType {
     /// Referenced Documentation: [Protocol Details - Register Size](https://support.labjack.com/docs/protocol-details-direct-modbus-tcp#ProtocolDetails[DirectModbusTCP]-ModbusRegistersAre16-bit,LabJackValuesAreOneorMoreModbusRegisters)
     pub fn size(&self) -> Quantity {
         match self {
-            LabJackDataType::Uint16 => 1,
+            LabJackDataType::Byte | LabJackDataType::Uint16 => 1,
+            LabJackDataType::Uint64 => 4,
             // All other types are 32-bit.
             _ => 2,
         }
@@ -166,7 +55,6 @@ pub enum LabJackDataValue {
     Int32(i32),
     Float32(f32),
     Byte(u8),
-    String(f32), // Make string
 }
 
 impl From<LabJackDataValue> for f64 {
@@ -178,7 +66,6 @@ impl From<LabJackDataValue> for f64 {
             LabJackDataValue::Int32(x) => x as f64,
             LabJackDataValue::Float32(x) => x as f64,
             LabJackDataValue::Byte(x) => x as f64,
-            LabJackDataValue::String(x) => x as f64,
         }
     }
 }
@@ -192,7 +79,6 @@ impl LabJackDataValue {
             LabJackDataValue::Int32(_) => LabJackDataType::Int32,
             LabJackDataValue::Float32(_) => LabJackDataType::Float32,
             LabJackDataValue::Byte(_) => LabJackDataType::Byte,
-            LabJackDataValue::String(_) => LabJackDataType::String,
         }
     }
 
@@ -247,27 +133,27 @@ impl LabJackDataValue {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct LabJackEntity<T: Decode> {
-    pub entry: LookupTable,
+pub struct LabJackEntity {
+    pub entry: Register,
     pub address: u32,
-
-    pub data_type: PhantomData<T>,
+    pub data_type: LabJackDataType,
 }
 
-impl<T: Decode> LabJackEntity<T> {
-    pub const fn new(address: u32, entry: LookupTable) -> LabJackEntity<T> {
+impl LabJackEntity {
+    pub const fn new(
+        address: u32,
+        entry: Register,
+        data_type: LabJackDataType,
+    ) -> LabJackEntity {
         LabJackEntity {
             address,
             entry,
-            data_type: PhantomData,
+            data_type,
         }
     }
 }
 
-impl<T> Display for LabJackEntity<T>
-where
-    T: Decode,
-{
+impl Display for LabJackEntity {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.entry)
     }

@@ -1,4 +1,4 @@
-use crate::core::modbus::{Client, Error};
+use crate::core::modbus::Error;
 use crate::core::LabJackDevice;
 use crate::prelude::modbus::Transport;
 use std::io::Sink;

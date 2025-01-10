@@ -1,203 +1,345 @@
-#![allow(clippy::all)]
-
 use std::collections::HashMap;
 use std::env;
-use std::error::Error;
-use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::fmt::Write;
+use std::fs;
 use std::path::Path;
 
-const LOOKUP_TABLE: &str = "LookupTable";
+const CODEGEN_HEADER: &'static str =
+r#"// Codegen - @bennjii 2025 Sourced @ labjack/ljm_constants.json
+// All required attributes
+use crate::prelude::*;
+// All access control variants to avoid duplication
+use crate::prelude::AccessControl::*;
 
-fn to_camel_case(input: &str) -> String {
-    let mut result = String::new();
-    let mut uppercase_next = true;
+"#;
 
-    for c in input.chars() {
-        match c {
-            '_' | ' ' => uppercase_next = true,
-            '-' => uppercase_next = true, // Handles possible dashes as well
-            c if uppercase_next => {
-                result.push(c.to_ascii_uppercase());
-                uppercase_next = false;
+fn main() {
+    // Path to the ljm_constants.json file
+    let input_file = "./resources/ljm_constants.json";
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let output_file = Path::new(&out_dir).join("codegen.rs");
+
+    // Read and parse the JSON file
+    let content = fs::read_to_string(input_file).expect("Failed to read JSON file");
+    let data: serde_json::Value =
+        serde_json::from_str(&content).expect("Failed to parse JSON file");
+
+    // Extract registers and generate output
+    let mut output = String::new();
+
+    // Write header
+    output.write_str(CODEGEN_HEADER).unwrap();
+
+    let support_map = crate::SupportLookup::try_from(&data)
+        .expect("Could not decode support information, improper format.");
+
+    output.write_str(
+        &format!(r#"
+// LabJack Constants Version: {}
+// Support URL: {}
+"#, support_map.version, support_map.support_url)).unwrap();
+
+    if let Some(registers) = data.get("registers").and_then(|r| r.as_array()) {
+        for reg in registers {
+            // We cannot proceed if these properties do not exist, hence panic.
+            let name = reg.get("name").unwrap().as_str().unwrap();
+            let address = reg.get("address").unwrap().as_u64().unwrap();
+            let r#type = reg.get("type").unwrap().as_str().unwrap();
+            let desc = reg.get("description")
+                .map(|v| v.as_str().unwrap())
+                .unwrap_or("No Description");
+
+            let tags = reg.get("tags")
+                .map(|tags| tags.as_array().unwrap().to_vec())
+                .unwrap_or(vec![])
+                .iter()
+                .map(|v| v.as_str().unwrap().to_string())
+                .collect::<Vec<_>>();
+
+            let access_control =
+                crate::AccessControl::try_from(reg.get("readwrite").unwrap().as_str().unwrap())
+                    .unwrap();
+
+            let all_devices = reg.get("devices").unwrap().as_array().unwrap();
+            let mut devices = vec![];
+            for device in all_devices {
+                devices.push(crate::DeviceCompat::try_from(device).expect(
+                    &format!("Could not deserialise device note: {device:?}"))
+                );
             }
-            c => result.push(c.to_ascii_lowercase()),
+
+            if let Some((base_name, range, suffix)) =
+                parse_name_with_range_and_optional_suffix(name)
+            {
+                for i in range {
+                    let expanded_name = if suffix.is_empty() {
+                        format!("{}{}", base_name, i)
+                    } else {
+                        format!("{}{}_{}", base_name, i, suffix)
+                    };
+
+                    generate_register(
+                        &mut output,
+                        Register {
+                            data_type: decode_type(r#type),
+                            name: expanded_name.as_str(),
+                            base_address: address,
+                            offset: Some(i),
+                            access_control: &access_control,
+                            desc,
+                            devices: &devices,
+                            tags: &tags,
+                            default: None
+                        },
+                        &support_map
+                    );
+                }
+            } else {
+                // The case when the register does not contain
+                generate_register(
+                    &mut output,
+                    Register {
+                        name,
+                        base_address: address,
+                        data_type: decode_type(r#type),
+                        offset: None,
+                        access_control: &access_control,
+                        desc,
+                        devices: &devices,
+                        tags: &tags,
+                        default: None
+                    },
+                    &support_map
+                );
+            }
         }
     }
 
-    result
+    // Write the generated code to the output file
+    fs::write(&output_file, output).expect("Failed to write output file");
+    println!("cargo:rerun-if-changed={}", input_file);
 }
 
-fn resolve_data_type(variant: u32) -> &'static str {
-    match variant {
-        0 => "crate::prelude::data_types::Uint16",
-        1 => "crate::prelude::data_types::Uint32",
-        2 => "crate::prelude::data_types::Int32",
-        3 => "crate::prelude::data_types::Float32",
-        4 => "crate::prelude::data_types::Uint64",
-        99 => "crate::prelude::data_types::Byte",
-        98 => "crate::prelude::data_types::Byte", // TODO: Support `String`.
-        variant => panic!(
-            "Unsupported data type: {}. Expected one-of 0,1,2,34,98,99.",
-            variant
-        ),
+fn decode_type(r#type: &str) -> &'static str {
+    match r#type {
+        "INT32" => "Int32",
+        "UINT16" => "Uint16",
+        "UINT32" => "Uint32",
+        "UINT64" => "Uint64",
+        "FLOAT32" => "Float32",
+        "STRING" | "BYTE" => "Byte",
+        _ => panic!("Unsupported type {}", r#type),
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Path to the C header file
-    let header_path = "./resources/LabJackMModbusMap.h";
-    let out_dir = &env::var("OUT_DIR")?;
-    let path = Path::new(out_dir).join("codegen.rs");
-    let mut file = BufWriter::new(File::create(&path)?);
-
-    // Open the C header file for reading
-    let header_file = File::open(header_path)?;
-    let reader = BufReader::new(header_file);
-
-    let lines: Vec<(String, (Option<u32>, Option<u32>))> = reader
-        .lines()
-        .filter_map(|e| e.ok())
-        .filter_map(|line| {
-            if !line.contains("_ADDRESS") && !line.contains("_TYPE") {
-                return None;
-            }
-
-            line.trim()
-                .strip_prefix("enum { LJM_")
-                .and_then(|v| v.strip_suffix("};"))
-                .and_then(|v| v.split_once('='))
-                .and_then(|(a, b)| {
-                    if a.ends_with("_ADDRESS ") {
-                        a.rsplit_once("_ADDRESS").map(|(key, _)| {
-                            let addr = b.trim().parse::<u32>().ok();
-                            if addr.is_none() {
-                                eprintln!("Could not parse address (integer) of value: {}", b);
-                            }
-                            (to_camel_case(key), (addr, None))
-                        })
-                    } else {
-                        a.rsplit_once("_TYPE").map(|(key, _)| {
-                            let d_type = b.trim().parse::<u32>().ok();
-                            if d_type.is_none() {
-                                eprintln!("Could not parse datatype (integer) of value: {}", b);
-                            }
-                            (to_camel_case(key), (None, d_type))
-                        })
-                    }
-                })
-        })
-        .collect::<Vec<_>>();
-
-    let mut map: HashMap<String, (Option<u32>, Option<u32>)> = HashMap::new();
-
-    // Group the entries by their string key and merge the options.
-    for (key, (opt1, opt2)) in lines {
-        // println!("cargo:warning={}, {:?}, {:?}", key, opt1, opt2);
-        map.entry(key)
-            .and_modify(|(existing1, existing2)| {
-                *existing1 = existing1.or(opt1); // Merge first option.
-                *existing2 = existing2.or(opt2); // Merge second option.
-            })
-            .or_insert((opt1, opt2));
+fn size_of(data_type: &'static str) -> u64 {
+    match data_type {
+        "Byte" => 1,
+        "Uint16" => 1,
+        "Float32" => 2,
+        "Uint32" => 2,
+        "Int32" => 2,
+        "Uint64" => 4,
+        _ => panic!("Unsupported type {}", data_type),
     }
+}
 
-    writeln!(&mut file, "use serde::{{Deserialize, Serialize}};").unwrap();
-    writeln!(
-        &mut file,
-        "#[derive(Copy, Clone, Hash, Debug, PartialEq, Eq, Serialize, Deserialize)]"
+fn format_device_compat(compat: &DeviceCompat) -> String {
+    format!(
+        "  * - {}{} {}",
+        compat.name,
+        compat.min_firmware.map(|v| format!(" [Since {}]", v.to_string())).unwrap_or_default(),
+        compat.desc.clone().unwrap_or("".to_string())
     )
-    .unwrap();
-    writeln!(&mut file, "pub enum {} {{", LOOKUP_TABLE).unwrap();
-    for (key, _) in map.clone() {
-        writeln!(&mut file, "    {},", key).unwrap();
+}
+
+fn generate_register(
+    output: &mut String,
+    Register {
+        name,
+        base_address,
+        offset,
+        data_type,
+        access_control,
+        desc,
+        devices,
+        tags,
+        default,
+    }: Register,
+    support_lookup: &SupportLookup
+) {
+    let control_value = match access_control {
+        AccessControl::ReadOnly => "{ ReadableCtrl as u8 }",
+        AccessControl::ReadWrite => "{ AllCtrl as u8 }",
+        AccessControl::WriteOnly => "{ WritableCtrl as u8 }",
+    };
+
+    output.push_str(&format!(
+        r#"
+/**
+  * #### {name}
+  *
+  * **Access**: {access_control:?} \
+  * **Compatible Devices**:
+{}
+  *
+  * {}
+  *
+  * _Relevant Documentation:_
+  * {}
+  */
+pub const {name}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister {{
+    register: Register {{
+        name: "{name}",
+        address: {},
+        data_type: LabJackDataType::{data_type},
+        default_value: {default:?}
+    }}
+}};
+"#,
+        devices
+            .into_iter()
+            .map(|device| format_device_compat(device))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        // "\" to delimit the end, \n to CR, and "  * " to indent and space.
+        desc.replace(";", " \\\n  * "),
+        tags
+            .iter()
+            .filter_map(|tag| {
+                support_lookup.hashmap.get(tag)
+                    .map(|support_suffix|
+                        format!("[{tag}]({}{})", support_lookup.base_url, support_suffix))
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        base_address + (offset.unwrap_or(0) * size_of(data_type)),
+    ));
+}
+
+// Parses a register name with a range and optional suffix, e.g., "AIN#(0:149)_EF_READ_C"
+fn parse_name_with_range_and_optional_suffix(
+    name: &str,
+) -> Option<(&str, std::ops::RangeInclusive<u64>, &str)> {
+    let range_start = name.find("#(")?;
+    let range_end = name.find(")")?;
+    let suffix_start = range_end + 1;
+
+    let base_name = &name[..range_start];
+    let range_part = &name[(range_start + 2)..range_end];
+    let suffix = name
+        .get(suffix_start..)
+        .unwrap_or("")
+        .trim_start_matches('_'); // Handle optional suffix
+
+    let mut parts = range_part.split(':');
+    let start: u64 = parts.next()?.parse().ok()?;
+    let end: u64 = parts.next()?.parse().ok()?;
+
+    Some((base_name, start..=end, suffix))
+}
+
+#[derive(Debug)]
+pub enum AccessControl {
+    ReadOnly,
+    WriteOnly,
+    ReadWrite,
+}
+
+impl TryFrom<&str> for AccessControl {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "R" => Ok(AccessControl::ReadOnly),
+            "W" => Ok(AccessControl::WriteOnly),
+            "RW" => Ok(AccessControl::ReadWrite),
+            _ => Err(()),
+        }
     }
-    writeln!(&mut file, "}}",).unwrap();
+}
 
-    // writeln!(&mut file, "impl From<{}> for (u32, u32) {{", LOOKUP_TABLE).unwrap();
-    writeln!(&mut file, "impl {} {{", LOOKUP_TABLE).unwrap();
-    // writeln!(
-    //     &mut file,
-    //     "    pub const fn raw(&self) -> crate::core::LabJackEntity<impl crate::prelude::data_types::Decode> {{",
-    // )
-    // .unwrap();
-    // writeln!(&mut file, "        match self {{",).unwrap();
-    // for (key, (address, data_type)) in &map {
-    //     writeln!(
-    //         &mut file,
-    //         "            {}::{} => crate::core::LabJackEntity::<{}>::new({}, {}::{}),",
-    //         LOOKUP_TABLE,
-    //         key,
-    //         resolve_data_type(data_type.ok_or(format!(
-    //             "Could not decode given labjack data type for {}",
-    //             key
-    //         ))?),
-    //         address.ok_or(format!(
-    //             "Could not decode given labjack address for {}",
-    //             key
-    //         ))?,
-    //         LOOKUP_TABLE,
-    //         key,
-    //     )
-    //     .unwrap();
-    // }
-    // writeln!(&mut file, "         }}",).unwrap();
-    // writeln!(&mut file, "    }}",).unwrap();
+#[derive(Debug)]
+pub struct DeviceCompat {
+    pub min_firmware: Option<f64>,
+    pub desc: Option<String>,
+    pub name: String,
+}
 
-    writeln!(&mut file, "}}",).unwrap();
+impl<'a> TryFrom<&'a serde_json::Value> for DeviceCompat {
+    type Error = ();
 
-    for (key, (address, data_type)) in map {
-        let dt = resolve_data_type(data_type.unwrap());
-        let addr = address.unwrap();
+    fn try_from(value: &'a serde_json::Value) -> Result<Self, Self::Error> {
+        match value.is_object() {
+            true => {
+                // Expecting the form: { "device": string, "fwmin": float }
+                let name = value.get("device").ok_or(())?.as_str().ok_or(())?;
+                let min_firmware = value.get("fwmin")
+                    .map(|val| val.as_f64().unwrap());
+                let description = value.get("description")
+                    .map(|val| val.as_str().unwrap().to_string());
 
-        let content = format!(
-            "crate::core::LabJackEntity::<{}>::new({}, {}::{})",
-            resolve_data_type(data_type.ok_or(format!(
-                "Could not decode given labjack data type for {}",
-                key
-            ))?),
-            address.ok_or(format!(
-                "Could not decode given labjack address for {}",
-                key
-            ))?,
-            LOOKUP_TABLE,
-            key,
-        );
+                Ok(DeviceCompat {
+                    min_firmware,
+                    name: name.to_string(),
+                    desc: description,
+                })
+            }
+            false => {
+                let name = value.as_str().ok_or(())?;
 
-        writeln!(
-            &mut file,
-            r#"
-            /// The {key} register.
-            ///
-            /// Data Type: **{dt}**
-            ///
-            /// Address: **{addr}**
-            ///
-            pub struct {key};
-
-            impl crate::prelude::data_types::Register for {key} {{
-                type DataType = {dt};
-
-                fn data_type(&self) -> Self::DataType {{
-                    {dt}
-                }}
-
-                fn entity(&self) -> crate::core::LabJackEntity<Self::DataType> {{
-                    {content}
-                }}
-
-                fn name(&self) -> &'static str {{
-                    "{key}"
-                }}
-
-                fn address(&self) -> u16 {{
-                    {addr}
-                }}
-            }}
-        "#
-        )
-        .unwrap();
+                Ok(DeviceCompat {
+                    min_firmware: None,
+                    name: name.to_string(),
+                    desc: None
+                })
+            }
+        }
     }
+}
 
-    Ok(())
+
+struct SupportLookup {
+    version: String,
+    support_url: String,
+    base_url: String,
+    hashmap: HashMap<String, String>
+}
+
+impl TryFrom<&serde_json::Value> for SupportLookup {
+    type Error = ();
+
+    fn try_from(value: &serde_json::Value) -> Result<Self, Self::Error> {
+        let header = value.get("header").ok_or(())?;
+        let version = header.get("version").unwrap().as_str().unwrap();
+        let support_url = header.get("support_url").unwrap().as_str().unwrap();
+        let base_url = header.get("tags_base_url").unwrap().as_str().unwrap();
+
+        let tags = value.get("tag_mappings").unwrap()
+            .as_object().unwrap()
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
+            .collect::<HashMap<String, String>>();
+
+        Ok(SupportLookup {
+            version: version.to_string(),
+            support_url: support_url.to_string(),
+            base_url: base_url.to_string(),
+
+            hashmap: tags
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct Register<'a> {
+    pub name: &'a str,
+    pub desc: &'a str,
+    pub base_address: u64,
+    pub offset: Option<u64>,
+    pub data_type: &'static str,
+    pub access_control: &'a AccessControl,
+    pub devices: &'a Vec<DeviceCompat>,
+    pub tags: &'a Vec<String>,
+    pub default: Option<f64>
 }

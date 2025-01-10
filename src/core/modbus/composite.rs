@@ -51,7 +51,7 @@ impl<'a> Compositor<'a> {
         &mut self,
         function: &ReadFunction<R>,
     ) -> Result<ComposedMessage, Error> {
-        let word_size =  function.0.width();
+        let word_size = function.0.width();
         if word_size < 1 {
             return Err(Error::InvalidData(Reason::RecvBufferEmpty));
         }
@@ -111,21 +111,16 @@ impl<'a> Compositor<'a> {
 
         // Must account for unit ID and function ID (2 bytes) + base header size
         // TODO: Simplify- calculation isnt this difficult.
-        let composed_size = fns
-            .iter()
-            .fold(MODBUS_HEADER_SIZE as u16 + 2, |acc, f| match f {
-                FeedbackFunction::ReadRegisters(..) => {
-                    // TODO: Assumes 2width (not allways true)
-                    read_return_size += 2;
-                    acc + 4
-                }
-                FeedbackFunction::WriteRegisters(register, ..) => {
-                    todo!()
-                    // acc + 4 + register.size()
-                },
-            });
+        let composed_size = fns.iter().fold(2, |acc, f| match f {
+            FeedbackFunction::ReadRegisters(..) => {
+                // TODO: Assumes 2width (not allways true)
+                read_return_size += 2;
+                acc + 4
+            }
+            FeedbackFunction::WriteRegisters(register, data) => acc + 4 + data.len(),
+        });
 
-        let header = Header::new(self, composed_size);
+        let header = Header::new(self, composed_size as u16);
         let mut content = header.pack()?;
 
         content.write_u8(0x4C)?; // 0x4C is Feedback Code
@@ -134,17 +129,16 @@ impl<'a> Compositor<'a> {
             content.write_u8(frame.code())?;
 
             match frame {
-                FeedbackFunction::ReadRegisters(register, ..) => {
-                    todo!();
-                    // content.write_u16::<BigEndian>(register.address())?;
-                    // content.write_u8(register.size() as u8)?;
+                FeedbackFunction::ReadRegisters(address, quant) => {
+                    content.write_u16::<BigEndian>(*address)?;
+                    content.write_u8(*quant)?;
                 }
-                FeedbackFunction::WriteRegisters(register, value) => {
-                    let bytes = todo!(); // register.bytes(value);
+                FeedbackFunction::WriteRegisters(address, value) => {
+                    // let bytes = register.bytes(value);
 
-                    // content.write_u16::<BigEndian>(register.address())?;
-                    // content.write_u8(register.size() as u8)?;
-                    // content.write(bytes.as_slice())?;
+                    content.write_u16::<BigEndian>(*address)?;
+                    content.write_u8(value.len() as u8)?;
+                    content.write_all(*value)?;
                 }
             }
         }
