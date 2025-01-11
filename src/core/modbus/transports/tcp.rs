@@ -1,4 +1,3 @@
-use crate::core::data_types::Decode;
 use crate::prelude::data_types::{Register, StandardDecoder};
 use crate::prelude::*;
 use enum_primitive::FromPrimitive;
@@ -114,13 +113,10 @@ impl TcpTransport {
 impl Transport for TcpTransport {
     type Error = Error;
 
-    fn write<R>(&mut self, function: &WriteFunction<R>) -> Result<(), Self::Error>
-    where
-        R: Register,
-    {
+    fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
         let ComposedMessage {
             content, header, ..
-        } = self.compositor().compose_write(function)?;
+        } = self.compositor().compose_write(&function)?;
 
         match self.stream.write_all(&content) {
             Ok(_s) => {
@@ -138,18 +134,12 @@ impl Transport for TcpTransport {
         }
     }
 
-    fn read<R>(
-        &mut self,
-        function: &ReadFunction<R>,
-    ) -> Result<<R::DataType as DataType>::Value, Self::Error>
-    where
-        R: Register,
-    {
+    fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
         let ComposedMessage {
             content,
             header,
             expected_bytes,
-        } = self.compositor().compose_read(function)?;
+        } = self.compositor().compose_read(&function)?;
         let mut reply = vec![0; MODBUS_HEADER_SIZE + expected_bytes + 2].into_boxed_slice();
 
         self.stream.write_all(&content).map_err(Error::Io)?;
@@ -164,12 +154,8 @@ impl Transport for TcpTransport {
         TcpTransport::validate_response_code(&content, &reply)?;
 
         let data = TcpTransport::get_reply_data(&reply, expected_bytes)?;
-        function
-            .0
-            .data_type()
-            .try_decode(&StandardDecoder { bytes: &data[1..] })
         // TODO: Check expected length and remove 1.. offset.
-        // <R::DataType as Decode>::try_decode(StandardDecoder { bytes: &data[1..] })
+        StandardDecoder { bytes: &data[1..] }.decode_as(function.0.data_type)
     }
 
     // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
@@ -205,9 +191,10 @@ impl Transport for TcpTransport {
 /// // Connect to our LabJack over TCP
 /// let mut device = LabJack::connect::<Emulated>(-2).expect("Must connect");
 /// // Read the AIN55 pin without an extended feature
-/// let voltage = device.read_register(Ain55).expect("Must read");
+/// let voltage = device.read_register(*AIN55).expect("Must read");
 ///
-/// println!("Voltage(f32)={}", voltage);
+/// assert!(matches!(voltage, LabJackDataValue::Float32(..)));
+/// println!("Voltage(f32)={}", voltage.as_f64());
 /// ```
 pub struct Tcp;
 

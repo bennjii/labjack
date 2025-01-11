@@ -1,9 +1,7 @@
-use crate::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::core::data_types::{Decode, EmulatedDecoder, StandardDecoder};
-use crate::prelude::data_types::{Coerce, Register};
+use crate::prelude::*;
 
 pub struct EmulatedValue {
     base: LabJackDataValue,
@@ -44,38 +42,19 @@ impl EmulatedTransport {
 impl Transport for EmulatedTransport {
     type Error = Error;
 
-    fn write<R>(&mut self, function: &WriteFunction<R>) -> Result<(), Self::Error>
-    where
-        R: Register,
-    {
-        let data_value = function.0.data_type().coerce(function.1.clone());
-        // let data_value = <R::DataType as Coerce>::coerce(function.1.clone());
+    fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
         self.addresses
-            .insert(function.0.address(), EmulatedValue::transparent(data_value));
+            .insert(function.0.address, EmulatedValue::transparent(function.1));
         Ok(())
     }
 
-    fn read<R>(
-        &mut self,
-        function: &ReadFunction<R>,
-    ) -> Result<<R::DataType as DataType>::Value, Self::Error>
-    where
-        R: Register,
-    {
-        match function {
-            ReadFunction(reg) => {
-                let EmulatedValue { base, function: _ } = self
-                    .addresses
-                    .get(&reg.address())
-                    .unwrap_or(EmulatedValue::floating());
+    fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
+        let EmulatedValue { base, function: _ } = self
+            .addresses
+            .get(&function.0.address)
+            .unwrap_or(EmulatedValue::floating());
 
-                function
-                    .0
-                    .data_type()
-                    .try_decode(&EmulatedDecoder { value: *base })
-                // <R::DataType as Decode>::try_decode(EmulatedDecoder { value: *base })
-            }
-        }
+        EmulatedDecoder { value: *base }.decode_as(function.0.data_type)
     }
 
     // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {

@@ -47,11 +47,8 @@ impl<'a> Compositor<'a> {
         self.transaction_id
     }
 
-    pub fn compose_read<R: Register>(
-        &mut self,
-        function: &ReadFunction<R>,
-    ) -> Result<ComposedMessage, Error> {
-        let word_size = function.0.width();
+    pub fn compose_read(&mut self, function: &ReadFunction) -> Result<ComposedMessage, Error> {
+        let word_size = function.0.data_type.size();
         if word_size < 1 {
             return Err(Error::InvalidData(Reason::RecvBufferEmpty));
         }
@@ -67,7 +64,7 @@ impl<'a> Compositor<'a> {
 
         content.write_u8(function.code())?;
 
-        content.write_u16::<BigEndian>(function.0.address())?;
+        content.write_u16::<BigEndian>(function.0.address)?;
         content.write_u16::<BigEndian>(word_size)?;
 
         Ok(ComposedMessage {
@@ -77,21 +74,18 @@ impl<'a> Compositor<'a> {
         })
     }
 
-    pub fn compose_write<R: Register>(
-        &mut self,
-        function: &WriteFunction<R>,
-    ) -> Result<ComposedMessage, Error> {
-        let size = function.0.width();
+    pub fn compose_write(&mut self, function: &WriteFunction) -> Result<ComposedMessage, Error> {
+        let size = function.0.data_type.size();
         let bytes = size * 2;
 
         let header = Header::new(self, bytes + MODBUS_HEADER_SIZE as u16);
         let mut content = header.pack()?;
 
         content.write_u8(function.code())?;
-        content.write_u16::<BigEndian>(function.0.address())?;
+        content.write_u16::<BigEndian>(function.0.address)?;
         content.write_u16::<BigEndian>(size)?;
 
-        let bytes = function.0.data_type().bytes(&function.1);
+        let bytes = function.1.bytes();
         content.write_u8(bytes.len() as u8)?;
 
         for v in bytes {
@@ -112,12 +106,12 @@ impl<'a> Compositor<'a> {
         // Must account for unit ID and function ID (2 bytes) + base header size
         // TODO: Simplify- calculation isnt this difficult.
         let composed_size = fns.iter().fold(2, |acc, f| match f {
-            FeedbackFunction::ReadRegisters(..) => {
+            FeedbackFunction::ReadRegister(..) => {
                 // TODO: Assumes 2width (not allways true)
                 read_return_size += 2;
                 acc + 4
             }
-            FeedbackFunction::WriteRegisters(register, data) => acc + 4 + data.len(),
+            FeedbackFunction::WriteRegister(register, data) => acc + 4 + data.bytes().len(),
         });
 
         let header = Header::new(self, composed_size as u16);
@@ -129,16 +123,16 @@ impl<'a> Compositor<'a> {
             content.write_u8(frame.code())?;
 
             match frame {
-                FeedbackFunction::ReadRegisters(address, quant) => {
-                    content.write_u16::<BigEndian>(*address)?;
-                    content.write_u8(*quant)?;
+                FeedbackFunction::ReadRegister(register) => {
+                    content.write_u16::<BigEndian>(register.address)?;
+                    content.write_u8(register.data_type.size() as u8)?;
                 }
-                FeedbackFunction::WriteRegisters(address, value) => {
-                    // let bytes = register.bytes(value);
+                FeedbackFunction::WriteRegister(register, value) => {
+                    let bytes = value.bytes();
 
-                    content.write_u16::<BigEndian>(*address)?;
-                    content.write_u8(value.len() as u8)?;
-                    content.write_all(*value)?;
+                    content.write_u16::<BigEndian>(register.address)?;
+                    content.write_u8(bytes.len() as u8)?;
+                    content.write_all(&bytes)?;
                 }
             }
         }
@@ -191,20 +185,20 @@ mod test {
         let mut transaction_id = 1;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let register = Ain55;
-        let write_function = WriteFunction(register, 16f32);
+        let register = AIN55;
+        let write_function = WriteFunction(*register, LabJackDataValue::Float32(16f32));
         let ComposedMessage { content, .. } = compositor
             .compose_write(&write_function)
             .expect("Must-compose");
 
-        let spanning_registers = Ain55.width();
+        let spanning_registers = AIN55.data_type.size();
         let expected_size = (2 * spanning_registers);
 
         assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
         assert_eq!([0x00, 0x00], content[2..4]); // ProtocolID
         assert_eq!((expected_size + 7).to_be_bytes(), content[4..6]); // Length (MSB-LSB)
         assert_eq!([MODBUS_UNIT_ID, 0x10], content[6..8]); // UnitID & Write Function Code
-        assert_eq!(Ain55.address().to_be_bytes(), content[8..10]);
+        assert_eq!(AIN55.address.to_be_bytes(), content[8..10]);
         assert_eq!(spanning_registers.to_be_bytes(), content[10..12]);
         assert_eq!(expected_size as u8, content[12]);
 
@@ -219,7 +213,7 @@ mod test {
         let mut transaction_id = 1;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let write_function = WriteFunction(Dac0, 3.3f32);
+        let write_function = WriteFunction(*DAC0, LabJackDataValue::Float32(3.3f32));
         let ComposedMessage { content, .. } = compositor
             .compose_write(&write_function)
             .expect("Must-compose");
@@ -239,7 +233,7 @@ mod test {
         let mut transaction_id = 1;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let write_function = WriteFunction(TestUint32, 0xC0BCCCCD);
+        let write_function = WriteFunction(*TEST_UINT32, LabJackDataValue::Uint32(0xC0BCCCCD));
         let ComposedMessage { content, .. } = compositor
             .compose_write(&write_function)
             .expect("Must-compose");
@@ -259,7 +253,7 @@ mod test {
         let mut transaction_id = 1;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let read_function = ReadFunction(TestUint32);
+        let read_function = ReadFunction(*TEST_UINT32);
         let ComposedMessage { content, .. } = compositor
             .compose_read(&read_function)
             .expect("Must-compose");
@@ -276,7 +270,7 @@ mod test {
         let mut transaction_id = 1;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let read_function = ReadFunction(TestUint16);
+        let read_function = ReadFunction(*TEST_UINT16);
         let ComposedMessage { content, .. } = compositor
             .compose_read(&read_function)
             .expect("Must-compose");
@@ -293,7 +287,7 @@ mod test {
         let mut transaction_id = 1;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let read_function = ReadFunction(Fio0);
+        let read_function = ReadFunction(*FIO0);
         let ComposedMessage { content, .. } = compositor
             .compose_read(&read_function)
             .expect("Must-compose");

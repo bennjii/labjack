@@ -1,8 +1,8 @@
-use crate::prelude::modbus::{Error, Quantity, Reason};
-
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
+
+use crate::prelude::*;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -130,6 +130,17 @@ impl LabJackDataValue {
             LabJackDataType::String => unimplemented!(),
         }
     }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        match self {
+            LabJackDataValue::Uint16(x) => x.to_be_bytes().to_vec(),
+            LabJackDataValue::Uint32(x) => x.to_be_bytes().to_vec(),
+            LabJackDataValue::Uint64(x) => x.to_be_bytes().to_vec(),
+            LabJackDataValue::Int32(x) => x.to_be_bytes().to_vec(),
+            LabJackDataValue::Float32(x) => x.to_be_bytes().to_vec(),
+            LabJackDataValue::Byte(x) => x.to_be_bytes().to_vec(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -140,11 +151,7 @@ pub struct LabJackEntity {
 }
 
 impl LabJackEntity {
-    pub const fn new(
-        address: u32,
-        entry: Register,
-        data_type: LabJackDataType,
-    ) -> LabJackEntity {
+    pub const fn new(address: u32, entry: Register, data_type: LabJackDataType) -> LabJackEntity {
         LabJackEntity {
             address,
             entry,

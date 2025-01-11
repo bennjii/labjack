@@ -6,25 +6,16 @@ pub const MODBUS_HEADER_SIZE: usize = 7;
 pub const MODBUS_MAX_PACKET_SIZE: usize = 260;
 
 pub trait Client: Transport {
-    fn read_register<Reg>(
-        &mut self,
-        register: Reg,
-    ) -> Result<<Reg::DataType as DataType>::Value, Self::Error>
-    where
-        Reg: Register,
-    {
-        self.read::<Reg>(&ReadFunction(register))
+    fn read_register(&mut self, register: Register) -> Result<LabJackDataValue, Self::Error> {
+        self.read(ReadFunction(register))
     }
 
-    fn write_register<Reg>(
+    fn write_register(
         &mut self,
-        register: Reg,
-        value: <<Reg as Register>::DataType as DataType>::Value,
-    ) -> Result<(), Self::Error>
-    where
-        Reg: Register,
-    {
-        self.write(&WriteFunction(register, value))
+        register: Register,
+        value: LabJackDataValue,
+    ) -> Result<(), Self::Error> {
+        self.write(WriteFunction(register, value))
     }
 }
 

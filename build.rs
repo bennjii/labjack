@@ -4,8 +4,7 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
-const CODEGEN_HEADER: &'static str =
-r#"// Codegen - @bennjii 2025 Sourced @ labjack/ljm_constants.json
+const CODEGEN_HEADER: &'static str = r#"// Codegen - @bennjii 2025 Sourced @ labjack/ljm_constants.json
 // All required attributes
 use crate::prelude::*;
 // All access control variants to avoid duplication
@@ -33,11 +32,15 @@ fn main() {
     let support_map = crate::SupportLookup::try_from(&data)
         .expect("Could not decode support information, improper format.");
 
-    output.write_str(
-        &format!(r#"
+    output
+        .write_str(&format!(
+            r#"
 // LabJack Constants Version: {}
 // Support URL: {}
-"#, support_map.version, support_map.support_url)).unwrap();
+"#,
+            support_map.version, support_map.support_url
+        ))
+        .unwrap();
 
     if let Some(registers) = data.get("registers").and_then(|r| r.as_array()) {
         for reg in registers {
@@ -45,11 +48,13 @@ fn main() {
             let name = reg.get("name").unwrap().as_str().unwrap();
             let address = reg.get("address").unwrap().as_u64().unwrap();
             let r#type = reg.get("type").unwrap().as_str().unwrap();
-            let desc = reg.get("description")
+            let desc = reg
+                .get("description")
                 .map(|v| v.as_str().unwrap())
                 .unwrap_or("No Description");
 
-            let tags = reg.get("tags")
+            let tags = reg
+                .get("tags")
                 .map(|tags| tags.as_array().unwrap().to_vec())
                 .unwrap_or(vec![])
                 .iter()
@@ -63,8 +68,9 @@ fn main() {
             let all_devices = reg.get("devices").unwrap().as_array().unwrap();
             let mut devices = vec![];
             for device in all_devices {
-                devices.push(crate::DeviceCompat::try_from(device).expect(
-                    &format!("Could not deserialise device note: {device:?}"))
+                devices.push(
+                    crate::DeviceCompat::try_from(device)
+                        .expect(&format!("Could not deserialise device note: {device:?}")),
                 );
             }
 
@@ -89,9 +95,9 @@ fn main() {
                             desc,
                             devices: &devices,
                             tags: &tags,
-                            default: None
+                            default: None,
                         },
-                        &support_map
+                        &support_map,
                     );
                 }
             } else {
@@ -107,9 +113,9 @@ fn main() {
                         desc,
                         devices: &devices,
                         tags: &tags,
-                        default: None
+                        default: None,
                     },
-                    &support_map
+                    &support_map,
                 );
             }
         }
@@ -148,7 +154,10 @@ fn format_device_compat(compat: &DeviceCompat) -> String {
     format!(
         "  * - {}{} {}",
         compat.name,
-        compat.min_firmware.map(|v| format!(" [Since {}]", v.to_string())).unwrap_or_default(),
+        compat
+            .min_firmware
+            .map(|v| format!(" [Since {}]", v.to_string()))
+            .unwrap_or_default(),
         compat.desc.clone().unwrap_or("".to_string())
     )
 }
@@ -166,7 +175,7 @@ fn generate_register(
         tags,
         default,
     }: Register,
-    support_lookup: &SupportLookup
+    support_lookup: &SupportLookup,
 ) {
     let control_value = match access_control {
         AccessControl::ReadOnly => "{ ReadableCtrl as u8 }",
@@ -188,9 +197,8 @@ fn generate_register(
   * _Relevant Documentation:_
   * {}
   */
-pub const {name}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister {{
+pub const {}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister {{
     register: Register {{
-        name: "{name}",
         address: {},
         data_type: LabJackDataType::{data_type},
         default_value: {default:?}
@@ -204,15 +212,15 @@ pub const {name}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister
             .join("\n"),
         // "\" to delimit the end, \n to CR, and "  * " to indent and space.
         desc.replace(";", " \\\n  * "),
-        tags
-            .iter()
+        tags.iter()
             .filter_map(|tag| {
-                support_lookup.hashmap.get(tag)
-                    .map(|support_suffix|
-                        format!("[{tag}]({}{})", support_lookup.base_url, support_suffix))
+                support_lookup.hashmap.get(tag).map(|support_suffix| {
+                    format!("[{tag}]({}{})", support_lookup.base_url, support_suffix)
+                })
             })
             .collect::<Vec<_>>()
             .join(", "),
+        name.to_uppercase(),
         base_address + (offset.unwrap_or(0) * size_of(data_type)),
     ));
 }
@@ -274,9 +282,9 @@ impl<'a> TryFrom<&'a serde_json::Value> for DeviceCompat {
             true => {
                 // Expecting the form: { "device": string, "fwmin": float }
                 let name = value.get("device").ok_or(())?.as_str().ok_or(())?;
-                let min_firmware = value.get("fwmin")
-                    .map(|val| val.as_f64().unwrap());
-                let description = value.get("description")
+                let min_firmware = value.get("fwmin").map(|val| val.as_f64().unwrap());
+                let description = value
+                    .get("description")
                     .map(|val| val.as_str().unwrap().to_string());
 
                 Ok(DeviceCompat {
@@ -291,19 +299,18 @@ impl<'a> TryFrom<&'a serde_json::Value> for DeviceCompat {
                 Ok(DeviceCompat {
                     min_firmware: None,
                     name: name.to_string(),
-                    desc: None
+                    desc: None,
                 })
             }
         }
     }
 }
 
-
 struct SupportLookup {
     version: String,
     support_url: String,
     base_url: String,
-    hashmap: HashMap<String, String>
+    hashmap: HashMap<String, String>,
 }
 
 impl TryFrom<&serde_json::Value> for SupportLookup {
@@ -315,8 +322,11 @@ impl TryFrom<&serde_json::Value> for SupportLookup {
         let support_url = header.get("support_url").unwrap().as_str().unwrap();
         let base_url = header.get("tags_base_url").unwrap().as_str().unwrap();
 
-        let tags = value.get("tag_mappings").unwrap()
-            .as_object().unwrap()
+        let tags = value
+            .get("tag_mappings")
+            .unwrap()
+            .as_object()
+            .unwrap()
             .into_iter()
             .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
             .collect::<HashMap<String, String>>();
@@ -326,7 +336,7 @@ impl TryFrom<&serde_json::Value> for SupportLookup {
             support_url: support_url.to_string(),
             base_url: base_url.to_string(),
 
-            hashmap: tags
+            hashmap: tags,
         })
     }
 }
@@ -341,5 +351,5 @@ pub struct Register<'a> {
     pub access_control: &'a AccessControl,
     pub devices: &'a Vec<DeviceCompat>,
     pub tags: &'a Vec<String>,
-    pub default: Option<f64>
+    pub default: Option<f64>,
 }

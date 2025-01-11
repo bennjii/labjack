@@ -27,8 +27,8 @@ impl Discover {
         let mut transaction_id = 0;
         let mut compositor = Compositor::new(&mut transaction_id, 1);
 
-        let read_product_id = FeedbackFunction::ReadRegisters(ProductId.address(), 2);
-        let read_serial_number = FeedbackFunction::ReadRegisters(SerialNumber.address(), 2);
+        let read_product_id = FeedbackFunction::ReadRegister(*PRODUCT_ID);
+        let read_serial_number = FeedbackFunction::ReadRegister(*SERIAL_NUMBER);
 
         let ComposedMessage { content, .. } =
             compositor.compose_feedback(&[read_product_id, read_serial_number])?;
@@ -97,12 +97,8 @@ impl Discover {
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::data_types::Register;
-    use crate::prelude::{ComposedMessage, ProductId};
-    use crate::{
-        core::modbus::{Compositor, FeedbackFunction},
-        prelude::translate,
-    };
+    use crate::core::modbus::{Compositor, FeedbackFunction};
+    use crate::prelude::{ComposedMessage, PRODUCT_ID};
 
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
@@ -116,9 +112,8 @@ mod test {
     fn feedback_function() {
         let mut transaction_id: u16 = 0;
         let mut compositor = Compositor::new(&mut transaction_id, 1);
-        let product_id_addr = ProductId.address();
 
-        let read_product_id = FeedbackFunction::ReadRegisters(ProductId.address(), 2);
+        let read_product_id = FeedbackFunction::ReadRegister(*PRODUCT_ID);
         let ComposedMessage { content, .. } = compositor
             .compose_feedback(&[read_product_id])
             .expect("Could not compose ModbusFeedback message");

@@ -1,7 +1,6 @@
-use crate::core::{DataType, LabJackDataType, LabJackDataValue, Quantity};
-use crate::prelude::{Address, Error, LabJackEntity};
+use crate::prelude::*;
+
 use num::traits::ToBytes;
-use num::{FromPrimitive};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -48,12 +47,12 @@ impl_traits! {
 }
 
 pub trait Decoder {
-    fn decode_primitive(&self, variant: LabJackDataType) -> Result<dyn FromPrimitive, Error>;
+    fn decode_as(&self, r#type: LabJackDataType) -> Result<LabJackDataValue, Error>;
 }
 
-pub trait Decode: Coerce {
-    fn try_decode(&self, v: &dyn Decoder) -> Result<<Self as DataType>::Value, Error>;
-}
+// pub trait Decode: Coerce {
+//     fn try_decode(&self, v: &dyn Decoder) -> Result<<Self as DataType>::Value, Error>;
+// }
 
 pub struct StandardDecoder<'a> {
     pub bytes: &'a [u8],
@@ -64,36 +63,24 @@ pub struct EmulatedDecoder {
 }
 
 impl Decoder for EmulatedDecoder {
-    fn decode_primitive(&self, _: LabJackDataType) -> Result<LabJackDataValue, Error> {
+    fn decode_as(&self, _: LabJackDataType) -> Result<LabJackDataValue, Error> {
         Ok(self.value)
-        // Apply indirection
-        // let as_f64 = self.value.as_f64();
-        // F::from_f64(as_f64).ok_or(Error::InvalidData(Reason::DecodingError))
     }
 }
 
 impl Decoder for StandardDecoder<'_> {
-    fn decode_primitive(&self, variant: LabJackDataType) -> Result<LabJackDataValue, Error> {
-        LabJackDataValue::from_bytes(variant, self.bytes)
-    }
-}
-
-impl<T> Decode for T
-where
-    T: Coerce,
-{
-    fn try_decode(&self, v: &dyn Decoder) -> Result<T, Error> {
-        v.decode_primitive(self.data_type())
+    fn decode_as(&self, r#type: LabJackDataType) -> Result<LabJackDataValue, Error> {
+        LabJackDataValue::from_bytes(r#type, self.bytes)
     }
 }
 
 /// Defines the ability for a register to be written or read from
 /// with the compile-time constraints of an access-control layer.
 #[repr(u8)]
-enum AccessControl {
+pub enum AccessControl {
     AllCtrl = 1,
     ReadableCtrl = 2,
-    WritableCtrl = 3
+    WritableCtrl = 3,
 }
 
 /// A register with an associated constant pertaining to the
@@ -104,7 +91,7 @@ enum AccessControl {
 /// invariants in access control over registers with separate
 /// reading and writing privileges.
 pub struct AccessLimitedRegister<const ACCESS_CONTROL: u8> {
-    register: Register,
+    pub register: Register,
 }
 
 impl<const N: u8> Deref for AccessLimitedRegister<N> {
@@ -124,12 +111,11 @@ impl<const N: u8> AccessLimitedRegister<N> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Register {
-    name: &'static str,
-    address: u32,
-    data_type: LabJackDataType,
-    default_value: Option<f64>
+    pub address: u16,
+    pub data_type: LabJackDataType,
+    pub default_value: Option<f64>,
 }
 
 trait Readable {}

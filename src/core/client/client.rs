@@ -1,10 +1,8 @@
-use crate::prelude::data_types::{Coerce, Decode, Register};
-
 use crate::prelude::*;
+
 use either::Either;
 use enum_primitive::FromPrimitive;
 use std::any::Any;
-use std::marker::PhantomData;
 
 pub struct LabJackClient<T>
 where
@@ -25,25 +23,20 @@ where
     /// Reads a singular value from a given address on the LabJack.
     pub fn read<An>(
         &mut self,
-        address: LookupTable, // &dyn Register<DataType = dyn Decode<Value = dyn FromPrimitive>>,
+        address: Register,
         channel: An,
     ) -> Result<<An as Adc>::Digital, Either<Error, <T as Transport>::Error>>
     where
         An: Adc,
     {
-        let value = self.read_register(&address.register())?;
-        let data = address.register().data_type().coerce(value);
-
-        Ok(channel.to_digital(data).into())
+        let value = self.read_register(address)?;
+        Ok(channel.to_digital(value).into())
     }
 
-    pub fn read_register<Reg>(
+    pub fn read_register(
         &mut self,
-        address: Reg,
-    ) -> Result<<Reg::DataType as DataType>::Value, Either<Error, <T as Transport>::Error>>
-    where
-        Reg: Register,
-    {
+        address: Register,
+    ) -> Result<LabJackDataValue, Either<Error, <T as Transport>::Error>> {
         self.transport
             .read_register(address)
             .map_err(|e| Either::Right(e))
@@ -52,9 +45,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::data_types::{Float32, Register};
     use crate::prelude::*;
-    use std::any::Any;
 
     /// A mocked DAQ used to override the values
     /// provided by conversions to test how the unit value operates.
@@ -82,7 +73,7 @@ mod test {
             LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
         let end = ButtEnd(LabJackDataValue::Uint16(100));
-        let value = device.read(LookupTable::Ain55, end);
+        let value = device.read(*AIN55, end);
 
         assert!(value.is_ok(), "result={:?}", value);
 
@@ -95,7 +86,7 @@ mod test {
         let mut device =
             LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
-        let value = device.read(LookupTable::Ain55, ());
+        let value = device.read(*AIN55, ());
 
         assert!(value.is_ok(), "result={:?}", value);
 
@@ -108,7 +99,7 @@ mod test {
         let mut device =
             LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
 
-        let value = device.read_register(Ain55).expect("!");
+        let value = device.read_register(*AIN55).expect("!");
         println!("{:?}", value);
     }
 
@@ -141,7 +132,7 @@ mod test {
         // Meaning, we specify the `LookupTable` entry, which is Sized
         // and can therefore group any differently-sized registers together
         // and read them all back into data value (enumerated) variants.
-        let registers = vec![LookupTable::Ain55, LookupTable::Ain56];
+        let registers = vec![*AIN55, *AIN56];
 
         for register in registers.into_iter() {
             let value = device.read(register, ()).expect("!");

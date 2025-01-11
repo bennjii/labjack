@@ -5,8 +5,8 @@ pub type Address = u16;
 pub type Quantity = u16;
 
 pub enum FeedbackFunction {
-    ReadRegisters(Vec<(Register, LabJackDataValue)>),
-    WriteRegisters(Vec<(Register, LabJackDataValue)>),
+    ReadRegister(Register),
+    WriteRegister(Register, LabJackDataValue),
 }
 
 /// Write all registers corresponding to the entity, with given value.
@@ -16,10 +16,9 @@ pub struct WriteFunction(pub Register, pub LabJackDataValue);
 /// Read all registers corresponding to the entity.
 pub struct ReadFunction(pub Register);
 
-trait Function {
+pub trait Function {
     fn code(&self) -> u8;
 }
-
 
 impl Function for ReadFunction {
     fn code(&self) -> u8 {
@@ -36,8 +35,8 @@ impl Function for WriteFunction {
 impl Function for FeedbackFunction {
     fn code(&self) -> u8 {
         match *self {
-            FeedbackFunction::ReadRegisters(..) => 0x00,
-            FeedbackFunction::WriteRegisters(..) => 0x01,
+            FeedbackFunction::ReadRegister(..) => 0x00,
+            FeedbackFunction::WriteRegister(..) => 0x01,
         }
     }
 }
