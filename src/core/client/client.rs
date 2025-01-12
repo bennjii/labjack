@@ -4,6 +4,7 @@ use either::Either;
 use enum_primitive::FromPrimitive;
 use std::any::Any;
 
+#[derive(Debug)]
 pub struct LabJackClient<T>
 where
     T: Transport,

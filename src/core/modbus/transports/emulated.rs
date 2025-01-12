@@ -19,6 +19,7 @@ impl EmulatedValue {
     }
 }
 
+#[derive(Debug)]
 pub struct EmulatedTransport {
     addresses: HashMap<Address, EmulatedValue>,
     device: LabJackDevice,
@@ -43,7 +44,10 @@ impl Transport for EmulatedTransport {
     }
 
     fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
-        let EmulatedValue { base: value, function: _ } = self
+        let EmulatedValue {
+            base: value,
+            function: _,
+        } = self
             .addresses
             .get(&function.0.address)
             .cloned()

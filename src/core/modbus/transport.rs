@@ -1,7 +1,8 @@
+use std::fmt::Debug;
 use crate::prelude::modbus::ReadFunction;
 use crate::prelude::{LabJackDataValue, WriteFunction};
 
-pub trait Transport {
+pub trait Transport: Debug {
     type Error: From<std::io::Error> + Sized;
 
     fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error>;
