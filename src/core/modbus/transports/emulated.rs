@@ -19,6 +19,7 @@ impl EmulatedValue {
     }
 }
 
+#[derive(Debug)]
 pub struct EmulatedTransport {
     addresses: HashMap<Address, EmulatedValue>,
     device: LabJackDevice,

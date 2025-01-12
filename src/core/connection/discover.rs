@@ -18,6 +18,30 @@ pub const BROADCAST_IP: &str = "192.168.255.255";
 pub const MODBUS_FEEDBACK_PORT: u16 = 52362;
 pub const MODBUS_COMMUNICATION_PORT: u16 = 502;
 
+/// Allows for the global discovery of LabJack devices on a local network through UDP discovery.
+///
+/// You may be looking for an alternative to the LJM `Open` function, which is instead found
+/// as the `connect` method on the [`LabJack`] user-facing API structure. This structure is
+/// slightly more low-level. You will know if you need it for your use-case.
+///
+/// The [`Discover`] structure mimics the behaviour of functions in the LJM library like `List_All`.
+/// An example of how this behaviour is used in practice can be seen below.
+///
+/// ```rust
+/// use labjack::prelude::*;
+///
+/// // Example for looking for any labjack available to connect using UDP.
+/// let search = Discover::search().expect("!");
+///
+/// search.for_each(|device| {
+///     println!("Found a device on {}:{}", device.ip_address, device.port);
+/// });
+/// ```
+///
+/// There are two approaches to discovery, depending on the use-case. The `search_all`
+/// function focuses on providing the response given by each recipient. This may or
+/// may not be the intended behaviour, reasoning `search` as the most common approach,
+/// simply providing an iterator over the resultant [`LabJackDevice`] located.
 pub struct Discover;
 
 impl Discover {
@@ -30,13 +54,16 @@ impl Discover {
         let read_product_id = FeedbackFunction::ReadRegister(*PRODUCT_ID);
         let read_serial_number = FeedbackFunction::ReadRegister(*SERIAL_NUMBER);
 
-        let ComposedMessage { content, .. } =
-            compositor.compose_feedback(&[read_product_id, read_serial_number])?;
+        let ComposedMessage {
+            content,
+            expected_bytes,
+            ..
+        } = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
         broadcast.send_to(&content, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
         // Collect all devices from the UDP broadcast
         Ok(std::iter::from_fn(move || {
-            let mut buf = [0u8; 1024];
+            let mut buf = vec![0u8; expected_bytes];
             match broadcast.recv_from(&mut buf) {
                 Ok((size, addr)) => {
                     debug!("Some LabJack Found! PacketSize={}, Addr={}", size, addr);
@@ -79,10 +106,7 @@ impl Discover {
     }
 
     pub fn search() -> Result<impl Iterator<Item = LabJackDevice>, Error> {
-        match Self::search_all() {
-            Ok(iter) => Ok(iter.filter_map(|item| item.ok())),
-            Err(error) => Err(error),
-        }
+        Self::search_all().map(|search| search.filter_map(|item| item.ok()))
     }
 
     fn broadcast(duration: Duration) -> Result<UdpSocket, std::io::Error> {

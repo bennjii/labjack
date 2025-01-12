@@ -10,7 +10,21 @@ use std::{
 
 pub const MODBUS_PROTOCOL_TCP: u16 = 0x0000;
 
+/// The default port by which ModBus communication
+/// occurs over a standard connection to a LabJack device over ethernet.
+///
+/// Note: The [`Discover`] module will use a different port since it operates over the UDP broadcast methodology.
 pub const MODBUS_TCP_DEFAULT_PORT: u16 = 502;
+
+/// Describes the maximum ammount of data
+/// that can be sent in an Ethernet packet.
+///
+/// Note that the Wi-Fi maximum-size is different,
+/// however this library does not cater to that
+/// use-case.
+///
+/// Referenced from the [Packet Size Limits](https://support.labjack.com/docs/protocol-details-direct-modbus-tcp#ProtocolDetails[DirectModbusTCP]-PacketSizeLimits) documentation.
+pub const MAX_DATA_LENGTH: usize = 1040;
 
 /// As referenced in the LabJack manual fields documentation for ModBus messages,
 /// the UnitID field is not used (as bridging is not used). Therefore, the default
@@ -31,6 +45,7 @@ const STARTING_TRANSACTION_ID: u16 = 1;
 
 // TODO: Redo the responsibilities of the transaction id here...
 
+#[derive(Debug)]
 pub struct TcpTransport {
     transaction_id: u16,
     unit_id: u8,
@@ -188,7 +203,6 @@ impl Transport for TcpTransport {
 /// ```
 /// // Import prelude items
 /// use labjack::prelude::*;
-/// // Import the specific pin we wish to read
 ///
 /// // Connect to our LabJack over TCP
 /// let mut device = LabJack::connect::<Emulated>(-2).expect("Must connect");

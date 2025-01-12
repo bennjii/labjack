@@ -120,7 +120,7 @@ impl<'a> Compositor<'a> {
             }
             FeedbackFunction::WriteRegister(reg, ..) => {
                 acc + BASE_FRAME_SIZE + reg.data_type.size() as usize
-            },
+            }
         });
 
         let header = Header::new(self, composed_size as u16);
@@ -313,9 +313,7 @@ mod test {
         let mut transaction_id = 0;
         let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
 
-        let functions = &[
-            FeedbackFunction::ReadRegister(*PRODUCT_ID),
-        ];
+        let functions = &[FeedbackFunction::ReadRegister(*PRODUCT_ID)];
 
         let ComposedMessage { content, .. } = compositor
             .compose_feedback(functions)
@@ -335,7 +333,7 @@ mod test {
 
         let functions = &[
             FeedbackFunction::ReadRegister(*AIN55),
-            FeedbackFunction::ReadRegister(*AIN56)
+            FeedbackFunction::ReadRegister(*AIN56),
         ];
 
         let ComposedMessage { content, .. } = compositor
@@ -343,22 +341,13 @@ mod test {
             .expect("Must-compose");
 
         assert_eq!(transaction_id.to_be_bytes(), content[0..2]);
-        assert_eq!(
-            [0x00, 0x00, 0x00, 0x0A, 0x01, 0x4C],
-            content[2..8]
-        );
+        assert_eq!([0x00, 0x00, 0x00, 0x0A, 0x01, 0x4C], content[2..8]);
 
         // AIN55 Frame
-        assert_eq!(
-            [0x00, 0x00, 0x6E, 0x02],
-            content[8..12]
-        );
+        assert_eq!([0x00, 0x00, 0x6E, 0x02], content[8..12]);
 
         // AIN56 Frame
-        assert_eq!(
-            [0x00, 0x00, 0x70, 0x02],
-            content[12..]
-        );
+        assert_eq!([0x00, 0x00, 0x70, 0x02], content[12..]);
     }
 
     #[test]
@@ -378,27 +367,15 @@ mod test {
             .expect("Must-compose");
 
         assert_eq!(transaction_id.to_be_bytes(), content[0..2]);
-        assert_eq!(
-            [0x00, 0x00, 0x00, 0x0C, 0x01, 0x4C],
-            content[2..8]
-        );
+        assert_eq!([0x00, 0x00, 0x00, 0x0C, 0x01, 0x4C], content[2..8]);
 
         // AIN55 Frame (Read-Frame)
-        assert_eq!(
-            [0x00, 0x00, 0x6E, 0x02],
-            content[8..12]
-        );
+        assert_eq!([0x00, 0x00, 0x6E, 0x02], content[8..12]);
 
         // AIN56 Frame (Write-Frame)
-        assert_eq!(
-            [0x01, 0x00, 0x70, 0x02],
-            content[12..16]
-        );
+        assert_eq!([0x01, 0x00, 0x70, 0x02], content[12..16]);
 
         // Writen AIN56 Value (15.0)
-        assert_eq!(
-            value_written.to_be_bytes(),
-            content[16..]
-        )
+        assert_eq!(value_written.to_be_bytes(), content[16..])
     }
 }

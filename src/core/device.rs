@@ -1,4 +1,4 @@
-use super::{ConnectionType, DeviceType};
+use super::{ConnectionType, DeviceType, LabJack};
 use crate::prelude::discover::MODBUS_COMMUNICATION_PORT;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -64,6 +64,21 @@ impl LabJackDevice {
             ip_address: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
             serial_number: LabJackSerialNumber::emulated(),
             port: MODBUS_COMMUNICATION_PORT,
+        }
+    }
+
+    /// Used to create a [`LabJackDevice`] given the `ip`, `device_type` and `serial_number`
+    /// are known beforehand. This allows for static definition of devices, skipping the resolution/discovery
+    /// step in connecting to the device.
+    ///
+    /// Commonly paired with the [`LabJack::connect_with`] method.
+    pub fn known(ip: IpAddr, device_type: DeviceType, serial: impl Into<LabJackSerialNumber>) -> LabJackDevice {
+        LabJackDevice {
+            connection_type: ConnectionType::ETHERNET,
+            port: MODBUS_COMMUNICATION_PORT,
+            ip_address: ip,
+            device_type,
+            serial_number: serial.into(),
         }
     }
 }
