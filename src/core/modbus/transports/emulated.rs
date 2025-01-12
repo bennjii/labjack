@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::prelude::*;
 
+#[derive(Clone, Debug)]
 pub struct EmulatedValue {
     base: LabJackDataValue,
     #[allow(dead_code)]
@@ -13,13 +14,6 @@ impl EmulatedValue {
     fn transparent(base: LabJackDataValue) -> EmulatedValue {
         EmulatedValue {
             base,
-            function: |a, _| a,
-        }
-    }
-
-    fn floating() -> &'static EmulatedValue {
-        &EmulatedValue {
-            base: LabJackDataValue::Uint16(0),
             function: |a, _| a,
         }
     }
@@ -49,12 +43,13 @@ impl Transport for EmulatedTransport {
     }
 
     fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
-        let EmulatedValue { base, function: _ } = self
+        let EmulatedValue { base: value, function: _ } = self
             .addresses
             .get(&function.0.address)
-            .unwrap_or(EmulatedValue::floating());
+            .cloned()
+            .unwrap_or(EmulatedValue::transparent(function.0.data_type.floating()));
 
-        EmulatedDecoder { value: *base }.decode_as(function.0.data_type)
+        EmulatedDecoder { value }.decode_as(function.0.data_type)
     }
 
     // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {

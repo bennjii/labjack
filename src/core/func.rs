@@ -1,7 +1,7 @@
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
-
+use std::io::Bytes;
 use crate::prelude::*;
 
 #[repr(u32)]
@@ -39,6 +39,17 @@ impl LabJackDataType {
             LabJackDataType::Uint64 => 4,
             // All other types are 32-bit.
             _ => 2,
+        }
+    }
+
+    pub fn floating(&self) -> LabJackDataValue {
+        match self {
+            LabJackDataType::Float32 => LabJackDataValue::Float32(0.0),
+            LabJackDataType::Uint16 => LabJackDataValue::Uint16(0),
+            LabJackDataType::Uint32 => LabJackDataValue::Uint32(0),
+            LabJackDataType::Uint64 => LabJackDataValue::Uint64(0),
+            LabJackDataType::Int32 => LabJackDataValue::Int32(0),
+            LabJackDataType::String | LabJackDataType::Byte => LabJackDataValue::Byte(0)
         }
     }
 }

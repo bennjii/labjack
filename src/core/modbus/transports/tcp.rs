@@ -154,6 +154,8 @@ impl Transport for TcpTransport {
         TcpTransport::validate_response_code(&content, &reply)?;
 
         let data = TcpTransport::get_reply_data(&reply, expected_bytes)?;
+        println!("Decoding data in data type: {:?}", function.0.data_type);
+
         // TODO: Check expected length and remove 1.. offset.
         StandardDecoder { bytes: &data[1..] }.decode_as(function.0.data_type)
     }
@@ -193,8 +195,8 @@ impl Transport for TcpTransport {
 /// // Read the AIN55 pin without an extended feature
 /// let voltage = device.read_register(*AIN55).expect("Must read");
 ///
-/// assert!(matches!(voltage, LabJackDataValue::Float32(..)));
-/// println!("Voltage(f32)={}", voltage.as_f64());
+/// assert!(matches!(voltage, LabJackDataValue::Float32(..)), "had {voltage:?}");
+/// println!("Voltage(as f64)={}", voltage.as_f64());
 /// ```
 pub struct Tcp;
 
