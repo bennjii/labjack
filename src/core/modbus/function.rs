@@ -1,42 +1,42 @@
+use crate::prelude::data_types::Register;
+use crate::prelude::{DataType, LabJackDataValue};
+
 pub type Address = u16;
 pub type Quantity = u16;
-pub type Value = u16;
 
-pub enum ModbusFeedbackFunction<'a> {
-    ReadRegisters(Address, u8),
-    WriteRegisters(Address, &'a [u8]),
+pub enum FeedbackFunction {
+    ReadRegister(Register),
+    WriteRegister(Register, LabJackDataValue),
 }
 
-pub enum Function<'a> {
-    ReadHoldingRegisters(Address, Quantity),
-    ReadInputRegisters(Address, Quantity),
+/// Write all registers corresponding to the entity, with given value.
+/// Must assert that the entity and value match register variants on types provided.
+pub struct WriteFunction(pub Register, pub LabJackDataValue);
 
-    WriteRegister(Address, Value),
-    WriteRegisters(Address, Quantity, &'a [u8]),
+/// Read all registers corresponding to the entity.
+pub struct ReadFunction(pub Register);
 
-    // Feedback can
-    Feedback(&'a [ModbusFeedbackFunction<'a>]),
+pub trait Function {
+    fn code(&self) -> u8;
 }
 
-impl<'a> Function<'a> {
-    pub(crate) fn code(&self) -> u8 {
-        match *self {
-            Function::ReadHoldingRegisters(_, _) => 0x03,
-            Function::ReadInputRegisters(_, _) => 0x04,
-
-            Function::WriteRegister(_, _) => 0x06,
-            Function::WriteRegisters(_, _, _) => 0x10,
-
-            Function::Feedback(_) => 0x4C,
-        }
+impl Function for ReadFunction {
+    fn code(&self) -> u8 {
+        0x03
     }
 }
 
-impl<'a> ModbusFeedbackFunction<'a> {
-    pub(crate) fn code(&self) -> u8 {
+impl Function for WriteFunction {
+    fn code(&self) -> u8 {
+        0x10 // 16
+    }
+}
+
+impl Function for FeedbackFunction {
+    fn code(&self) -> u8 {
         match *self {
-            ModbusFeedbackFunction::ReadRegisters(_, _) => 0x00,
-            ModbusFeedbackFunction::WriteRegisters(_, _) => 0x01,
+            FeedbackFunction::ReadRegister(..) => 0x00,
+            FeedbackFunction::WriteRegister(..) => 0x01,
         }
     }
 }

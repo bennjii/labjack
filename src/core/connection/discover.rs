@@ -11,34 +11,28 @@ use std::time::Duration;
 
 use log::debug;
 
-use crate::{
-    core::{
-        modbus::{Error, ModbusFeedbackFunction, TcpCompositor},
-        ConnectionType, DeviceType, LabJackDevice, LabJackSerialNumber,
-    },
-    prelude::translate,
-};
+use crate::prelude::data_types::Register;
+use crate::prelude::*;
 
-const BROADCAST_IP: &str = "192.168.255.255";
-const MODBUS_FEEDBACK_PORT: u16 = 52362;
+pub const BROADCAST_IP: &str = "192.168.255.255";
+pub const MODBUS_FEEDBACK_PORT: u16 = 52362;
+pub const MODBUS_COMMUNICATION_PORT: u16 = 502;
 
 pub struct Discover;
 
 impl Discover {
-    pub fn search() -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
+    pub fn search_all() -> Result<impl Iterator<Item = Result<LabJackDevice, Error>>, Error> {
         // Send broadcast request.
         let broadcast = Discover::broadcast(Duration::from_secs(10))?;
         let mut transaction_id = 0;
-        let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
+        let mut compositor = Compositor::new(&mut transaction_id, 1);
 
-        let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
-        let serial_number_addr = translate::LookupTable::SerialNumber.raw().address as u16;
+        let read_product_id = FeedbackFunction::ReadRegister(*PRODUCT_ID);
+        let read_serial_number = FeedbackFunction::ReadRegister(*SERIAL_NUMBER);
 
-        let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
-        let read_serial_number = ModbusFeedbackFunction::ReadRegisters(serial_number_addr, 2);
-
-        let (buf, _, _) = compositor.compose_feedback(&[read_product_id, read_serial_number])?;
-        broadcast.send_to(&buf, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
+        let ComposedMessage { content, .. } =
+            compositor.compose_feedback(&[read_product_id, read_serial_number])?;
+        broadcast.send_to(&content, (BROADCAST_IP, MODBUS_FEEDBACK_PORT))?;
 
         // Collect all devices from the UDP broadcast
         Ok(std::iter::from_fn(move || {
@@ -84,6 +78,13 @@ impl Discover {
         }))
     }
 
+    pub fn search() -> Result<impl Iterator<Item = LabJackDevice>, Error> {
+        match Self::search_all() {
+            Ok(iter) => Ok(iter.filter_map(|item| item.ok())),
+            Err(error) => Err(error),
+        }
+    }
+
     fn broadcast(duration: Duration) -> Result<UdpSocket, std::io::Error> {
         let socket = UdpSocket::bind(("0.0.0.0", 0))?;
         debug!("Listening through ephemeral: {}", socket.local_addr()?);
@@ -96,34 +97,34 @@ impl Discover {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        core::modbus::{ModbusFeedbackFunction, TcpCompositor},
-        prelude::translate,
-    };
+    use crate::core::modbus::{Compositor, FeedbackFunction};
+    use crate::prelude::{ComposedMessage, PRODUCT_ID};
 
     // Feedback Response:
     //       Echo     Len  UID Fn      Data
     //    +--------+  +--+  +  +   +-----------+
     // => 0, 1, 0, 0, 0, 6, 1, 76, 64, 224, 0, 0
-    // Therefore, we recieve: [64, 224, 0, 0].
+    // Therefore, we receive: [64, 224, 0, 0].
     // That is: 0x40E00000 = 1088421888
     // Which is the LabJack Product ID.
 
     #[test]
     fn feedback_function() {
-        let mut transaction_id = 0;
-        let mut compositor = TcpCompositor::new(&mut transaction_id, 1);
-        let product_id_addr = translate::LookupTable::ProductId.raw().address as u16;
+        let mut transaction_id: u16 = 0;
+        let mut compositor = Compositor::new(&mut transaction_id, 1);
 
-        let read_product_id = ModbusFeedbackFunction::ReadRegisters(product_id_addr, 2);
-        let (buf, _, _) = compositor
+        let read_product_id = FeedbackFunction::ReadRegister(*PRODUCT_ID);
+        let ComposedMessage { content, .. } = compositor
             .compose_feedback(&[read_product_id])
-            .expect("Could not compose MBFB message");
+            .expect("Could not compose ModbusFeedback message");
 
+        let as_be = transaction_id.to_be_bytes();
+
+        // Transaction Identifier (arbitrary)
+        assert_eq!(content[0..2], as_be[..]);
         assert_eq!(
-            buf,
+            content[2..],
             vec![
-                0x00, 0x01, // Transaction Identifier (arbitrary)
                 0x00, 0x00, // Protocol Identifier (Modbus TCP/IP)
                 0x00, 0x06, // Length (6 bytes to follow)
                 0x01, // Unit Identifier (slave address, usually 1)
