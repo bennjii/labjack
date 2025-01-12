@@ -101,46 +101,55 @@ impl<'a> Compositor<'a> {
     }
 
     pub fn compose_feedback(&mut self, fns: &[FeedbackFunction]) -> Result<ComposedMessage, Error> {
-        let mut read_return_size = 0;
+        const BASE_FRAME_SIZE: usize = 4;
 
-        // Must account for unit ID and function ID (2 bytes) + base header size
-        // TODO: Simplify- calculation isnt this difficult.
+        let mut read_return_size = 0;
+        // Each frame is broken into a read or write frame, specified here
+        // as the two variants of the feedback functions. There is a common
+        // schema for each for the first 4 bytes. After which only write-functions
+        // contain further information.
+        //
+        // We only get response data for read-frames.
+        //
+        // Example from LabJack is given here:
+        // https://support.labjack.com/docs/protocol-details-direct-modbus-tcp#ProtocolDetails[DirectModbusTCP]-ModbusFeedback(MBFB,function#76)
         let composed_size = fns.iter().fold(2, |acc, f| match f {
-            FeedbackFunction::ReadRegister(..) => {
-                // TODO: Assumes 2width (not allways true)
-                read_return_size += 2;
-                acc + 4
+            FeedbackFunction::ReadRegister(reg) => {
+                read_return_size += reg.data_type.size();
+                acc + BASE_FRAME_SIZE
             }
-            FeedbackFunction::WriteRegister(register, data) => acc + 4 + data.bytes().len(),
+            FeedbackFunction::WriteRegister(reg, ..) => {
+                acc + BASE_FRAME_SIZE + reg.data_type.size() as usize
+            },
         });
 
         let header = Header::new(self, composed_size as u16);
         let mut content = header.pack()?;
 
-        content.write_u8(0x4C)?; // 0x4C is Feedback Code
+        content.write_u8(0x4C)?; // 0x4C is Feedback Code (76)
 
         for frame in fns {
             content.write_u8(frame.code())?;
 
-            match frame {
-                FeedbackFunction::ReadRegister(register) => {
-                    content.write_u16::<BigEndian>(register.address)?;
-                    content.write_u8(register.data_type.size() as u8)?;
-                }
-                FeedbackFunction::WriteRegister(register, value) => {
-                    let bytes = value.bytes();
+            // Write common header
+            if let FeedbackFunction::ReadRegister(register)
+            | FeedbackFunction::WriteRegister(register, ..) = frame
+            {
+                content.write_u16::<BigEndian>(register.address)?;
+                content.write_u8(register.data_type.size() as u8)?;
+            }
 
-                    content.write_u16::<BigEndian>(register.address)?;
-                    content.write_u8(bytes.len() as u8)?;
-                    content.write_all(&bytes)?;
-                }
+            // Write data for write-function
+            if let FeedbackFunction::WriteRegister(.., value) = frame {
+                let bytes = value.bytes();
+                content.write_all(&bytes)?;
             }
         }
 
         Ok(ComposedMessage {
             content,
             header,
-            expected_bytes: 7 + read_return_size,
+            expected_bytes: 7 + read_return_size as usize,
         })
     }
 }
@@ -297,5 +306,99 @@ mod test {
             [0x00, 0x00, 0x00, 0x06, 0x01, 0x03, 0x07, 0xD0, 0x00, 0x01],
             content[2..]
         );
+    }
+
+    #[test]
+    fn read_one_feedback() {
+        let mut transaction_id = 0;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let functions = &[
+            FeedbackFunction::ReadRegister(*PRODUCT_ID),
+        ];
+
+        let ComposedMessage { content, .. } = compositor
+            .compose_feedback(functions)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]);
+        assert_eq!(
+            [0x00, 0x00, 0x00, 0x06, 0x01, 0x4C, 0x00, 0xEA, 0x60, 0x02],
+            content[2..]
+        )
+    }
+
+    #[test]
+    fn read_many_feedback() {
+        let mut transaction_id = 0;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let functions = &[
+            FeedbackFunction::ReadRegister(*AIN55),
+            FeedbackFunction::ReadRegister(*AIN56)
+        ];
+
+        let ComposedMessage { content, .. } = compositor
+            .compose_feedback(functions)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]);
+        assert_eq!(
+            [0x00, 0x00, 0x00, 0x0A, 0x01, 0x4C],
+            content[2..8]
+        );
+
+        // AIN55 Frame
+        assert_eq!(
+            [0x00, 0x00, 0x6E, 0x02],
+            content[8..12]
+        );
+
+        // AIN56 Frame
+        assert_eq!(
+            [0x00, 0x00, 0x70, 0x02],
+            content[12..]
+        );
+    }
+
+    #[test]
+    fn read_and_write_feedback() {
+        let mut transaction_id = 0;
+        let mut compositor = Compositor::new(&mut transaction_id, MODBUS_UNIT_ID);
+
+        let value_written: f32 = 15.0;
+
+        let functions = &[
+            FeedbackFunction::ReadRegister(*AIN55),
+            FeedbackFunction::WriteRegister(*AIN56, LabJackDataValue::Float32(value_written)),
+        ];
+
+        let ComposedMessage { content, .. } = compositor
+            .compose_feedback(functions)
+            .expect("Must-compose");
+
+        assert_eq!(transaction_id.to_be_bytes(), content[0..2]);
+        assert_eq!(
+            [0x00, 0x00, 0x00, 0x0C, 0x01, 0x4C],
+            content[2..8]
+        );
+
+        // AIN55 Frame (Read-Frame)
+        assert_eq!(
+            [0x00, 0x00, 0x6E, 0x02],
+            content[8..12]
+        );
+
+        // AIN56 Frame (Write-Frame)
+        assert_eq!(
+            [0x01, 0x00, 0x70, 0x02],
+            content[12..16]
+        );
+
+        // Writen AIN56 Value (15.0)
+        assert_eq!(
+            value_written.to_be_bytes(),
+            content[16..]
+        )
     }
 }

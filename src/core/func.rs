@@ -1,8 +1,8 @@
+use crate::prelude::*;
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Bytes;
-use crate::prelude::*;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -49,7 +49,7 @@ impl LabJackDataType {
             LabJackDataType::Uint32 => LabJackDataValue::Uint32(0),
             LabJackDataType::Uint64 => LabJackDataValue::Uint64(0),
             LabJackDataType::Int32 => LabJackDataValue::Int32(0),
-            LabJackDataType::String | LabJackDataType::Byte => LabJackDataValue::Byte(0)
+            LabJackDataType::String | LabJackDataType::Byte => LabJackDataValue::Byte(0),
         }
     }
 }
