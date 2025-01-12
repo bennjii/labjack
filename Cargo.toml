@@ -2,6 +2,11 @@
 name = "labjack"
 version = "0.1.0"
 edition = "2021"
+description = "An opinionated Pure-Rust LabJack driver"
+license = "MIT"
+repository = "https://github.com/bennjii/labjack"
+keywords = ["labjack", "pure", "ljm"]
+include = ["/resources"]
 
 [dependencies]
 byteorder = "1.5.0"
