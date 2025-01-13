@@ -342,8 +342,7 @@ mod test {
     use crate::core::{LabJackDataValue, ReadFunction};
     use crate::prelude::{TcpTransport, Transport, TEST_UINT32};
 
-    #[tokio::test]
-    async fn validate_waterfall() {
+    async fn setup() -> (TcpTransport, TcpStream) {
         env_logger::init();
 
         debug!("Testing validate waterfall");
@@ -354,24 +353,76 @@ mod test {
 
         debug!("Listening on {}", addr);
 
-        let writer = TcpStream::connect(addr).await.unwrap();
-        let mut transport_out = TcpTransport::new(writer);
+        let reader = TcpStream::connect(addr).await.unwrap();
+        let mut transport = TcpTransport::new(reader);
 
         debug!("Both transports connected");
 
         let (mut reader, ..) = listener.accept().await.expect("Must accept connection");
         debug!("Accepted Connection");
 
+        (transport, reader)
+    }
+
+    #[tokio::test]
+    async fn validate_waterfall() {
+        let (mut transport, mut writer) = setup().await;
+
         let join = tokio::spawn(async move {
             sleep(Duration::from_millis(100)).await;
-            reader.write(&[0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33]).await.expect("Must write");
+            writer.write(&[0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33]).await.expect("Must write");
             debug!("Written value to other stream");
         });
 
         let join2 = tokio::spawn(async move {
-            let value = transport_out.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
             assert_eq!(value, LabJackDataValue::Uint32(0x00112233));
-            transport_out.cancel.notify_one();
+            transport.cancel.notify_one();
+        });
+
+        join!(join2, join);
+    }
+
+    #[tokio::test]
+    async fn validate_async_return() {
+        let (mut transport, mut writer) = setup().await;
+
+        let join = tokio::spawn(async move {
+            sleep(Duration::from_millis(100)).await;
+
+            writer.write(&[
+                0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x44
+            ]).await.expect("Must write");
+
+            sleep(Duration::from_millis(100)).await;
+
+            writer.write(&[
+                0x00, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33
+            ]).await.expect("Must write");
+
+            sleep(Duration::from_millis(100)).await;
+
+            writer.write(&[
+                0x00, 0x03, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x22
+            ]).await.expect("Must write");
+
+            sleep(Duration::from_millis(100)).await;
+
+            debug!("Written value to other stream");
+        });
+
+        let join2 = tokio::spawn(async move {
+
+            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            assert_eq!(value, LabJackDataValue::Uint32(0x00112244));
+
+            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            assert_eq!(value, LabJackDataValue::Uint32(0x00112233));
+
+            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            assert_eq!(value, LabJackDataValue::Uint32(0x00112222));
+
+            transport.cancel.notify_one();
         });
 
         join!(join2, join);
