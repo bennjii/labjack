@@ -26,11 +26,13 @@ pub struct ComposedMessage {
 ///
 /// Defines how large the payload will be, and the corresponding transaction, protocol and unit ids.
 ///
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Header {
     pub transaction_id: u16,
     pub protocol_id: u16,
     pub length: u16,
+
+    // Move UnitID out of header. Length is most important
     pub unit_id: u8,
 }
 

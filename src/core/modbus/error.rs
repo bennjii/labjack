@@ -40,7 +40,14 @@ impl From<Reason> for Error {
 }
 
 #[derive(Debug)]
+pub enum QueueError {
+    QueueEmptyWhenRead,
+    FrameSizeTooLarge,
+}
+
+#[derive(Debug)]
 pub enum Error {
+    Queue(QueueError),
     Exception(ExceptionCode),
     Io(io::Error),
     InvalidResponse,

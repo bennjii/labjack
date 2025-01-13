@@ -22,7 +22,7 @@ where
     }
 
     /// Reads a singular value from a given address on the LabJack.
-    pub fn read<An>(
+    pub async fn read<An>(
         &mut self,
         address: Register,
         channel: An,
@@ -30,16 +30,17 @@ where
     where
         An: Adc,
     {
-        let value = self.read_register(address)?;
+        let value = self.read_register(address).await?;
         Ok(channel.to_digital(value).into())
     }
 
-    pub fn read_register(
+    pub async fn read_register(
         &mut self,
         address: Register,
     ) -> Result<LabJackDataValue, Either<Error, <T as Transport>::Error>> {
         self.transport
             .read_register(address)
+            .await
             .map_err(|e| Either::Right(e))
     }
 }
@@ -68,13 +69,14 @@ mod test {
         }
     }
 
-    #[test]
-    fn read_butt() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+    #[tokio::test]
+    async fn read_butt() {
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         let end = ButtEnd(LabJackDataValue::Uint16(100));
-        let value = device.read(*AIN55, end);
+        let value = device.read(*AIN55, end).await;
 
         assert!(value.is_ok(), "result={:?}", value);
 
@@ -82,12 +84,13 @@ mod test {
         assert_eq!(value, LabJackDataValue::Uint16(100));
     }
 
-    #[test]
-    fn read_butt_no_filter() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+    #[tokio::test]
+    async fn read_butt_no_filter() {
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
-        let value = device.read(*AIN55, ());
+        let value = device.read(*AIN55, ()).await;
 
         assert!(value.is_ok(), "result={:?}", value);
 
@@ -95,19 +98,21 @@ mod test {
         assert_eq!(value.as_f64(), 0f64);
     }
 
-    #[test]
-    fn read_singular() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+    #[tokio::test]
+    async fn read_singular() {
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
-        let value = device.read_register(*AIN55).expect("!");
+        let value = device.read_register(*AIN55).await.expect("!");
         println!("{:?}", value);
     }
 
-    #[test]
-    fn read_many() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+    #[tokio::test]
+    async fn read_many() {
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         // Static-Typing will only go so far.
         //
@@ -124,10 +129,11 @@ mod test {
         // }
     }
 
-    #[test]
-    fn read_many_indirected() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).expect("Must connect");
+    #[tokio::test]
+    async fn read_many_indirected() {
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         // We can opt for indirection, through use of enumerations.
         // Meaning, we specify the `LookupTable` entry, which is Sized
@@ -136,7 +142,7 @@ mod test {
         let registers = vec![*AIN55, *AIN56];
 
         for register in registers.into_iter() {
-            let value = device.read(register, ()).expect("!");
+            let value = device.read(register, ()).await.expect("!");
             println!("{:?}", value);
 
             // But if we needed to unionise the values
