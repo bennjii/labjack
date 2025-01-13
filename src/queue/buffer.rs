@@ -1,8 +1,8 @@
 use crate::core::QueueError::QueueEmptyWhenRead;
 use crate::prelude::{Error, Header};
+use log::debug;
 use std::collections::HashMap;
 use std::sync::Arc;
-use log::debug;
 use tokio::sync::{Mutex, Notify};
 use tokio_util::codec::{BytesCodec, FramedRead};
 
@@ -53,15 +53,13 @@ impl Topic {
         let observer = self.add_observer(id).await;
         observer.wait_for_event().await;
 
-        let data = self
-            .data
-            .lock()
-            .await;
-        let response = data
-            .get(&id)
-            .ok_or(Error::Queue(QueueEmptyWhenRead))?;
+        let data = self.data.lock().await;
+        let response = data.get(&id).ok_or(Error::Queue(QueueEmptyWhenRead))?;
 
-        debug!("Wait-Signal triggered on response TxnID={}", response.0.transaction_id);
+        debug!(
+            "Wait-Signal triggered on response TxnID={}",
+            response.0.transaction_id
+        );
 
         self.remove_observer(id).await;
         Ok((*response).clone())

@@ -8,10 +8,7 @@ pub const MODBUS_HEADER_SIZE: usize = 7;
 pub const MODBUS_MAX_PACKET_SIZE: usize = 260;
 
 pub trait Client: Transport {
-    async fn read_register(
-        &mut self,
-        register: Register,
-    ) -> Result<LabJackDataValue, Self::Error> {
+    async fn read_register(&mut self, register: Register) -> Result<LabJackDataValue, Self::Error> {
         self.read(ReadFunction(register)).await
     }
 

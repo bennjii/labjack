@@ -1,6 +1,7 @@
 use crate::prelude::data_types::{Register, StandardDecoder};
 use crate::prelude::*;
 use enum_primitive::FromPrimitive;
+use futures_util::sink::SinkExt;
 use log::{debug, error, trace};
 use std::collections::HashSet;
 use std::io::{Read, Write};
@@ -10,10 +11,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, Interest, ReadHalf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, Notify};
-use tokio_stream::{StreamExt};
+use tokio_stream::StreamExt;
 use tokio_util::bytes::{Buf, BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
-use futures_util::sink::SinkExt;
 
 use crate::prelude::Decoder as LocalDecoder;
 use crate::queue::buffer::Topic;
@@ -88,8 +88,9 @@ impl TcpTransport {
             TcpTransport::listen(
                 Arc::clone(&listener_topic),
                 Arc::clone(&listener_notify),
-                fr
-            ).await
+                fr,
+            )
+            .await
         });
 
         let transport = TcpTransport {
@@ -106,7 +107,11 @@ impl TcpTransport {
         transport
     }
 
-    async fn listen(topic: Arc<Topic>, notify: Arc<Notify>, mut read: FramedRead<OwnedReadHalf, BytesCodec>) {
+    async fn listen(
+        topic: Arc<Topic>,
+        notify: Arc<Notify>,
+        mut read: FramedRead<OwnedReadHalf, BytesCodec>,
+    ) {
         loop {
             tokio::select! {
                 data = read.next() => {
@@ -191,9 +196,7 @@ impl Transport for TcpTransport {
     type Error = Error;
 
     async fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
-        let ComposedMessage {
-            content, ..
-        } = self.compositor().compose_write(&function)?;
+        let ComposedMessage { content, .. } = self.compositor().compose_write(&function)?;
 
         self.stream_write.lock().await.send(content.clone()).await?;
 
@@ -332,8 +335,8 @@ impl Encoder<Vec<u8>> for BytesCodec {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
     use log::debug;
+    use std::time::Duration;
     use tokio::io::AsyncWriteExt;
     use tokio::join;
     use tokio::net::{TcpListener, TcpStream};
@@ -348,7 +351,9 @@ mod test {
         debug!("Testing validate waterfall");
 
         // Bind to any usable port
-        let listener = TcpListener::bind("127.0.0.1:0").await.expect("Must bind to a port");
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("Must bind to a port");
         let addr = listener.local_addr().unwrap();
 
         debug!("Listening on {}", addr);
@@ -370,12 +375,20 @@ mod test {
 
         let join = tokio::spawn(async move {
             sleep(Duration::from_millis(100)).await;
-            writer.write(&[0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33]).await.expect("Must write");
+            writer
+                .write(&[
+                    0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33,
+                ])
+                .await
+                .expect("Must write");
             debug!("Written value to other stream");
         });
 
         let join2 = tokio::spawn(async move {
-            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            let value = transport
+                .read(ReadFunction(*TEST_UINT32))
+                .await
+                .expect("Must write read fn.");
             assert_eq!(value, LabJackDataValue::Uint32(0x00112233));
             transport.cancel.notify_one();
         });
@@ -390,21 +403,30 @@ mod test {
         let join = tokio::spawn(async move {
             sleep(Duration::from_millis(100)).await;
 
-            writer.write(&[
-                0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x44
-            ]).await.expect("Must write");
+            writer
+                .write(&[
+                    0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x44,
+                ])
+                .await
+                .expect("Must write");
 
             sleep(Duration::from_millis(100)).await;
 
-            writer.write(&[
-                0x00, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33
-            ]).await.expect("Must write");
+            writer
+                .write(&[
+                    0x00, 0x02, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x33,
+                ])
+                .await
+                .expect("Must write");
 
             sleep(Duration::from_millis(100)).await;
 
-            writer.write(&[
-                0x00, 0x03, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x22
-            ]).await.expect("Must write");
+            writer
+                .write(&[
+                    0x00, 0x03, 0x00, 0x00, 0x00, 0x07, 0x01, 0x03, 0x04, 0x00, 0x11, 0x22, 0x22,
+                ])
+                .await
+                .expect("Must write");
 
             sleep(Duration::from_millis(100)).await;
 
@@ -412,14 +434,22 @@ mod test {
         });
 
         let join2 = tokio::spawn(async move {
-
-            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            let value = transport
+                .read(ReadFunction(*TEST_UINT32))
+                .await
+                .expect("Must write read fn.");
             assert_eq!(value, LabJackDataValue::Uint32(0x00112244));
 
-            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            let value = transport
+                .read(ReadFunction(*TEST_UINT32))
+                .await
+                .expect("Must write read fn.");
             assert_eq!(value, LabJackDataValue::Uint32(0x00112233));
 
-            let value = transport.read(ReadFunction(*TEST_UINT32)).await.expect("Must write read fn.");
+            let value = transport
+                .read(ReadFunction(*TEST_UINT32))
+                .await
+                .expect("Must write read fn.");
             assert_eq!(value, LabJackDataValue::Uint32(0x00112222));
 
             transport.cancel.notify_one();

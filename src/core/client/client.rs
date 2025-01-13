@@ -18,10 +18,7 @@ where
     T: Transport,
 {
     pub fn new(device: LabJackDevice, transport: T) -> LabJackClient<T> {
-        LabJackClient {
-            device,
-            transport,
-        }
+        LabJackClient { device, transport }
     }
 
     /// Reads a singular value from a given address on the LabJack.
@@ -74,8 +71,9 @@ mod test {
 
     #[tokio::test]
     async fn read_butt() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).await.expect("Must connect");
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         let end = ButtEnd(LabJackDataValue::Uint16(100));
         let value = device.read(*AIN55, end).await;
@@ -88,8 +86,9 @@ mod test {
 
     #[tokio::test]
     async fn read_butt_no_filter() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).await.expect("Must connect");
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         let value = device.read(*AIN55, ()).await;
 
@@ -101,8 +100,9 @@ mod test {
 
     #[tokio::test]
     async fn read_singular() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).await.expect("Must connect");
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         let value = device.read_register(*AIN55).await.expect("!");
         println!("{:?}", value);
@@ -110,8 +110,9 @@ mod test {
 
     #[tokio::test]
     async fn read_many() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).await.expect("Must connect");
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         // Static-Typing will only go so far.
         //
@@ -130,8 +131,9 @@ mod test {
 
     #[tokio::test]
     async fn read_many_indirected() {
-        let mut device =
-            LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).await.expect("Must connect");
+        let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+            .await
+            .expect("Must connect");
 
         // We can opt for indirection, through use of enumerations.
         // Meaning, we specify the `LookupTable` entry, which is Sized
