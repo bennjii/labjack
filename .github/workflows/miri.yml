@@ -30,4 +30,4 @@ jobs:
           components: miri
 
       - name: 🔍 Miri
-        command: cargo miri test
+        run: cargo miri test
