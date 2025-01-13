@@ -1,4 +1,4 @@
-name: Format & Check
+name: MiRi - UB Detector
 
 on:
   push:
@@ -27,20 +27,7 @@ jobs:
         with:
           toolchain: nightly
           override: true
+          components: miri
 
-      - name: Install `rustfmt`
-        run: rustup component add rustfmt
-
-      - name: Install `clippy`
-        run: rustup component add clippy
-
-      - name: 🔍 Format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --check
-
-      - name: 🔍 Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
+      - name: 🔍 Miri
+        command: cargo miri test
