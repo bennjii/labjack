@@ -103,7 +103,7 @@ impl LabJack {
     ///
     /// If you have obtained a [`LabJackDevice`] from any discovery method, you may
     /// instead choose to skip this step, and connect directly using the [`LabJack::connect_with`] method.
-    pub fn connect<T>(
+    pub async fn connect<T>(
         id: impl Into<LabJackSerialNumber>,
     ) -> Result<LabJackClient<<T as Connect>::Transport>, Error>
     where
@@ -116,7 +116,7 @@ impl LabJack {
             LabJack::discover_with_id(serial)?
         };
 
-        let transport = T::connect(device)?;
+        let transport = T::connect(device).await?;
         Ok(LabJackClient::new(device, transport))
     }
 
@@ -151,13 +151,13 @@ impl LabJack {
     /// println!("Connected to known device {:?}", connected);
     /// ```
     ///
-    pub fn connect_with<T>(
+    pub async fn connect_with<T>(
         device: LabJackDevice,
     ) -> Result<LabJackClient<<T as Connect>::Transport>, Error>
     where
         T: Connect,
     {
-        let transport = T::connect(device)?;
+        let transport = T::connect(device).await?;
         Ok(LabJackClient::new(device, transport))
     }
 }

@@ -72,7 +72,11 @@ impl LabJackDevice {
     /// step in connecting to the device.
     ///
     /// Commonly paired with the [`LabJack::connect_with`] method.
-    pub fn known(ip: IpAddr, device_type: DeviceType, serial: impl Into<LabJackSerialNumber>) -> LabJackDevice {
+    pub fn known(
+        ip: IpAddr,
+        device_type: DeviceType,
+        serial: impl Into<LabJackSerialNumber>,
+    ) -> LabJackDevice {
         LabJackDevice {
             connection_type: ConnectionType::ETHERNET,
             port: MODBUS_COMMUNICATION_PORT,

@@ -9,13 +9,19 @@ keywords = ["labjack", "pure", "ljm"]
 include = ["/resources"]
 
 [dependencies]
+serde = { version = "1.0.214", features = ["derive"] }
 byteorder = "1.5.0"
+
 either = "1.13.0"
 enum_primitive = "0.1.1"
 env_logger = "0.11.5"
 log = "0.4.22"
 num = "0.4.3"
-serde = { version = "1.0.214", features = ["derive"] }
+
+tokio-stream = "0.1.17"
+futures-util = { version = "0.3.31", features = ["sink"] }
+tokio-util = { version = "0.7.13", features = ["codec"] }
+tokio.workspace = true
 
 [build-dependencies]
 serde = { version = "1.0", features = ["derive"] }

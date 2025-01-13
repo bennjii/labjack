@@ -37,13 +37,13 @@ impl EmulatedTransport {
 impl Transport for EmulatedTransport {
     type Error = Error;
 
-    fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
+    async fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
         self.addresses
             .insert(function.0.address, EmulatedValue::transparent(function.1));
         Ok(())
     }
 
-    fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
+    async fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
         let EmulatedValue {
             base: value,
             function: _,
@@ -66,7 +66,7 @@ pub struct Emulated;
 impl Connect for Emulated {
     type Transport = EmulatedTransport;
 
-    fn connect(device: LabJackDevice) -> Result<Self::Transport, Error> {
+    async fn connect(device: LabJackDevice) -> Result<Self::Transport, Error> {
         Ok(EmulatedTransport::new(device))
     }
 }

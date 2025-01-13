@@ -2,6 +2,7 @@
 extern crate enum_primitive;
 pub mod core;
 
+mod queue;
 #[cfg(test)]
 pub mod test;
 
