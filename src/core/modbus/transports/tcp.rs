@@ -1,10 +1,10 @@
-use crate::prelude::data_types::{StandardDecoder};
+use crate::prelude::data_types::StandardDecoder;
 use crate::prelude::*;
 use enum_primitive::FromPrimitive;
 use futures_util::sink::SinkExt;
 use log::{debug, error, trace};
 use std::collections::HashSet;
-use std::io::{Write};
+use std::io::Write;
 use std::net::SocketAddr;
 use std::sync::Arc;
 

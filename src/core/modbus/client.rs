@@ -5,7 +5,10 @@ pub const MODBUS_HEADER_SIZE: usize = 7;
 pub const MODBUS_MAX_PACKET_SIZE: usize = 260;
 
 pub trait Client: Transport {
-    fn read_register(&mut self, register: Register) -> impl std::future::Future<Output = Result<LabJackDataValue, Self::Error>> + Send {
+    fn read_register(
+        &mut self,
+        register: Register,
+    ) -> impl std::future::Future<Output = Result<LabJackDataValue, Self::Error>> + Send {
         self.read(ReadFunction(register))
     }
 

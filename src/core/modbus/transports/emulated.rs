@@ -22,7 +22,7 @@ impl EmulatedValue {
 #[derive(Debug)]
 pub struct EmulatedTransport {
     addresses: HashMap<Address, EmulatedValue>,
-    device: LabJackDevice,
+    pub device: LabJackDevice,
 }
 
 impl EmulatedTransport {

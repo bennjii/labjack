@@ -1,5 +1,5 @@
 use crate::prelude::data_types::Register;
-use crate::prelude::{LabJackDataValue};
+use crate::prelude::LabJackDataValue;
 
 pub type Address = u16;
 pub type Quantity = u16;

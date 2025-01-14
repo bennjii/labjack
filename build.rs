@@ -72,8 +72,9 @@ fn main() {
             let mut devices = vec![];
             for device in all_devices {
                 devices.push(
-                    crate::DeviceCompat::try_from(device)
-                        .unwrap_or_else(|_| panic!("Could not deserialise device note: {device:?}")),
+                    crate::DeviceCompat::try_from(device).unwrap_or_else(|_| {
+                        panic!("Could not deserialise device note: {device:?}")
+                    }),
                 );
             }
 
