@@ -39,7 +39,7 @@ where
         self.transport
             .read_register(address)
             .await
-            .map_err(|e| Either::Right(e))
+            .map_err(Either::Right)
     }
 }
 

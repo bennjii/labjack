@@ -193,44 +193,40 @@ impl TcpTransport {
 impl Transport for TcpTransport {
     type Error = Error;
 
-    fn write(&mut self, function: WriteFunction) -> impl std::future::Future<Output = Result<(), Self::Error>> {
-        async move {
-            let ComposedMessage { content, .. } = self.compositor().compose_write(&function)?;
+    async fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
+        let ComposedMessage { content, .. } = self.compositor().compose_write(&function)?;
 
-            self.stream_write.lock().await.send(content.clone()).await?;
+        self.stream_write.lock().await.send(content.clone()).await?;
 
-            let (header, packet) = self.topic.wait_on(self.transaction_id).await?;
-            let response_header = Header::unpack(packet.as_slice())?;
+        let (header, packet) = self.topic.wait_on(self.transaction_id).await?;
+        let response_header = Header::unpack(packet.as_slice())?;
 
-            TcpTransport::validate_response_header(&header, &response_header)?;
-            TcpTransport::validate_response_code(&content, packet.as_slice())
-        }
+        TcpTransport::validate_response_header(&header, &response_header)?;
+        TcpTransport::validate_response_code(&content, packet.as_slice())
     }
 
-    fn read(&mut self, function: ReadFunction) -> impl std::future::Future<Output = Result<LabJackDataValue, Self::Error>> {
-        async move {
-            let ComposedMessage {
-                content,
-                header,
-                expected_bytes,
-            } = self.compositor().compose_read(&function)?;
+    async fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
+        let ComposedMessage {
+            content,
+            header,
+            expected_bytes,
+        } = self.compositor().compose_read(&function)?;
 
-            // self.stream_write.lock().await.
-            self.stream_write.lock().await.send(content.clone()).await?;
+        // self.stream_write.lock().await.
+        self.stream_write.lock().await.send(content.clone()).await?;
 
-            // We make a copy of the TID so it is not modified whilst in use
-            let (response_header, packet) = self.topic.wait_on(self.transaction_id).await?;
-            debug!("Response contains ... Header={response_header:?}. Packet={packet:?}");
+        // We make a copy of the TID so it is not modified whilst in use
+        let (response_header, packet) = self.topic.wait_on(self.transaction_id).await?;
+        debug!("Response contains ... Header={response_header:?}. Packet={packet:?}");
 
-            TcpTransport::validate_response_header(&header, &response_header)?;
-            TcpTransport::validate_response_code(&content, &packet)?;
+        TcpTransport::validate_response_header(&header, &response_header)?;
+        TcpTransport::validate_response_code(&content, &packet)?;
 
-            let bytes = TcpTransport::get_reply_data(&packet, expected_bytes)?;
-            debug!("Expected reply data: {bytes:?}");
+        let bytes = TcpTransport::get_reply_data(&packet, expected_bytes)?;
+        debug!("Expected reply data: {bytes:?}");
 
-            // TODO: Check expected length and remove 1.. offset.
-            StandardDecoder { bytes }.decode_as(function.0.data_type)
-        }
+        // TODO: Check expected length and remove 1.. offset.
+        StandardDecoder { bytes }.decode_as(function.0.data_type)
     }
 
     // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {

@@ -7,7 +7,7 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
-const CODEGEN_HEADER: &'static str = r#"// Codegen - @bennjii 2025 Sourced @ labjack/ljm_constants.json
+const CODEGEN_HEADER: &str = r#"// Codegen - @bennjii 2025 Sourced @ labjack/ljm_constants.json
 // All required attributes
 use crate::prelude::*;
 // All access control variants to avoid duplication
@@ -73,7 +73,7 @@ fn main() {
             for device in all_devices {
                 devices.push(
                     crate::DeviceCompat::try_from(device)
-                        .expect(&format!("Could not deserialise device note: {device:?}")),
+                        .unwrap_or_else(|_| panic!("Could not deserialise device note: {device:?}")),
                 );
             }
 
@@ -159,7 +159,7 @@ fn format_device_compat(compat: &DeviceCompat) -> String {
         compat.name,
         compat
             .min_firmware
-            .map(|v| format!(" [Since {}]", v.to_string()))
+            .map(|v| format!(" [Since {}]", v))
             .unwrap_or_default(),
         compat.desc.clone().unwrap_or("".to_string())
     )
@@ -209,8 +209,8 @@ pub const {}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister {{
 }};
 "#,
         devices
-            .into_iter()
-            .map(|device| format_device_compat(device))
+            .iter()
+            .map(format_device_compat)
             .collect::<Vec<_>>()
             .join("\n"),
         // "\" to delimit the end, \n to CR, and "  * " to indent and space.

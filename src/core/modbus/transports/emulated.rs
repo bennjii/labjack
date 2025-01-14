@@ -37,27 +37,23 @@ impl EmulatedTransport {
 impl Transport for EmulatedTransport {
     type Error = Error;
 
-    fn write(&mut self, function: WriteFunction) -> impl std::future::Future<Output = Result<(), Self::Error>> {
-        async move {
-            self.addresses
-                .insert(function.0.address, EmulatedValue::transparent(function.1));
-            Ok(())
-        }
+    async fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
+        self.addresses
+            .insert(function.0.address, EmulatedValue::transparent(function.1));
+        Ok(())
     }
 
-    fn read(&mut self, function: ReadFunction) -> impl std::future::Future<Output = Result<LabJackDataValue, Self::Error>> {
-        async move {
-            let EmulatedValue {
-                base: value,
-                function: _,
-            } = self
-                .addresses
-                .get(&function.0.address)
-                .cloned()
-                .unwrap_or(EmulatedValue::transparent(function.0.data_type.floating()));
+    async fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
+        let EmulatedValue {
+            base: value,
+            function: _,
+        } = self
+            .addresses
+            .get(&function.0.address)
+            .cloned()
+            .unwrap_or(EmulatedValue::transparent(function.0.data_type.floating()));
 
-            EmulatedDecoder { value }.decode_as(function.0.data_type)
-        }
+        EmulatedDecoder { value }.decode_as(function.0.data_type)
     }
 
     // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
