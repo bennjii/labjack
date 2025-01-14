@@ -185,7 +185,6 @@ impl Header {
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::data_types::Register;
     use crate::prelude::*;
 
     #[test]
@@ -200,7 +199,7 @@ mod test {
             .expect("Must-compose");
 
         let spanning_registers = AIN55.data_type.size();
-        let expected_size = (2 * spanning_registers);
+        let expected_size = 2 * spanning_registers;
 
         assert_eq!(transaction_id.to_be_bytes(), content[0..2]); // TransactionID
         assert_eq!([0x00, 0x00], content[2..4]); // ProtocolID

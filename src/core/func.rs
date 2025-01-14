@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -151,28 +151,5 @@ impl LabJackDataValue {
             LabJackDataValue::Float32(x) => x.to_be_bytes().to_vec(),
             LabJackDataValue::Byte(x) => x.to_be_bytes().to_vec(),
         }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct LabJackEntity {
-    pub entry: Register,
-    pub address: u32,
-    pub data_type: LabJackDataType,
-}
-
-impl LabJackEntity {
-    pub const fn new(address: u32, entry: Register, data_type: LabJackDataType) -> LabJackEntity {
-        LabJackEntity {
-            address,
-            entry,
-            data_type,
-        }
-    }
-}
-
-impl Display for LabJackEntity {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.entry)
     }
 }

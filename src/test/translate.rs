@@ -1,4 +1,3 @@
-use crate::prelude::data_types::Register;
 use crate::prelude::*;
 
 #[test]

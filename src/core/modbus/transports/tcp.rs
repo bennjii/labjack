@@ -363,11 +363,11 @@ mod test {
         debug!("Listening on {}", addr);
 
         let reader = TcpStream::connect(addr).await.unwrap();
-        let mut transport = TcpTransport::new(reader);
+        let transport = TcpTransport::new(reader);
 
         debug!("Both transports connected");
 
-        let (mut reader, ..) = listener.accept().await.expect("Must accept connection");
+        let (reader, ..) = listener.accept().await.expect("Must accept connection");
         debug!("Accepted Connection");
 
         (transport, reader)

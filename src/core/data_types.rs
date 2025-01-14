@@ -128,21 +128,21 @@ impl Readable for AccessLimitedRegister<{ ReadableCtrl as u8 }> {}
 impl Writable for AccessLimitedRegister<{ AllCtrl as u8 }> {}
 impl Readable for AccessLimitedRegister<{ AllCtrl as u8 }> {}
 
-pub trait __RegisterTrait {
-    fn entity(&self) -> LabJackEntity;
-
-    fn address(&self) -> Address;
-
-    fn name(&self) -> &'static str;
-
-    fn width(&self) -> Quantity {
-        self.data_type().size()
-    }
-
-    fn data_type(&self) -> LabJackDataType {
-        self.entity().data_type
-    }
-}
+// pub trait __RegisterTrait {
+//     fn entity(&self) -> LabJackEntity;
+//
+//     fn address(&self) -> Address;
+//
+//     fn name(&self) -> &'static str;
+//
+//     fn width(&self) -> Quantity {
+//         self.data_type().size()
+//     }
+//
+//     fn data_type(&self) -> LabJackDataType {
+//         self.entity().data_type
+//     }
+// }
 
 // -- Elision --
 
