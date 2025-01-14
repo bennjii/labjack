@@ -1,8 +1,6 @@
 use crate::prelude::*;
 
 use either::Either;
-use enum_primitive::FromPrimitive;
-use std::any::Any;
 
 #[derive(Debug)]
 pub struct LabJackClient<T>
@@ -31,7 +29,7 @@ where
         An: Adc,
     {
         let value = self.read_register(address).await?;
-        Ok(channel.to_digital(value).into())
+        Ok(channel.to_digital(value))
     }
 
     pub async fn read_register(

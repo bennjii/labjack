@@ -1,4 +1,4 @@
-use super::{ConnectionType, DeviceType, LabJack};
+use super::{ConnectionType, DeviceType};
 use crate::prelude::discover::MODBUS_COMMUNICATION_PORT;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};

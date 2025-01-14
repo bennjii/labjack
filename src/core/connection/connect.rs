@@ -6,7 +6,7 @@ use std::io::Sink;
 pub trait Connect {
     type Transport: Transport;
 
-    async fn connect(device: LabJackDevice) -> Result<Self::Transport, Error>;
+    fn connect(device: LabJackDevice) -> impl std::future::Future<Output = Result<Self::Transport, Error>> + Send;
 
     fn sink() -> Result<Sink, Error> {
         todo!()

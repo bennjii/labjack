@@ -1,5 +1,5 @@
 use crate::prelude::data_types::Register;
-use crate::prelude::{DataType, LabJackDataValue};
+use crate::prelude::{LabJackDataValue};
 
 pub type Address = u16;
 pub type Quantity = u16;
@@ -7,6 +7,15 @@ pub type Quantity = u16;
 pub enum FeedbackFunction {
     ReadRegister(Register),
     WriteRegister(Register, LabJackDataValue),
+}
+
+impl FeedbackFunction {
+    pub fn register(&self) -> Register {
+        match self {
+            FeedbackFunction::ReadRegister(r) => *r,
+            FeedbackFunction::WriteRegister(r, _) => *r,
+        }
+    }
 }
 
 /// Write all registers corresponding to the entity, with given value.

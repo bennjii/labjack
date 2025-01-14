@@ -1,5 +1,5 @@
-use crate::prelude::data_types::Register;
 use crate::prelude::*;
+
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 use std::io::Write;
@@ -134,12 +134,9 @@ impl<'a> Compositor<'a> {
             content.write_u8(frame.code())?;
 
             // Write common header
-            if let FeedbackFunction::ReadRegister(register)
-            | FeedbackFunction::WriteRegister(register, ..) = frame
-            {
-                content.write_u16::<BigEndian>(register.address)?;
-                content.write_u8(register.data_type.size() as u8)?;
-            }
+            let register = frame.register();
+            content.write_u16::<BigEndian>(register.address)?;
+            content.write_u8(register.data_type.size() as u8)?;
 
             // Write data for write-function
             if let FeedbackFunction::WriteRegister(.., value) = frame {

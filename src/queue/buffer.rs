@@ -4,12 +4,6 @@ use log::debug;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
-use tokio_util::codec::{BytesCodec, FramedRead};
-
-struct ReadQueue {
-    // Stores the `TransactionId`: Data(Bytes)
-    messages: HashMap<u16, Vec<u8>>,
-}
 
 #[derive(Debug)]
 struct Subscriber {

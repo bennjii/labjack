@@ -1,8 +1,8 @@
 use crate::prelude::*;
+
 use num::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
-use std::io::Bytes;
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]

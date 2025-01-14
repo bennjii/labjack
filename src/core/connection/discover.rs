@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use log::debug;
 
-use crate::prelude::data_types::Register;
 use crate::prelude::*;
 
 pub const BROADCAST_IP: &str = "192.168.255.255";
@@ -70,25 +69,31 @@ impl Discover {
 
                     // Device ID's taken from the LabJack UDP broadcast docs:
                     // https://support.labjack.com/docs/protocol-details-direct-modbus-tcp?search=product%20id#ProtocolDetails%5BDirectModbusTCP%5D-ReadT-SeriesProductID(Searchnetworkforadevice)
-                    let device_type = match <[u8; 4]>::try_from(&buf[8..12]) {
-                        Ok([0x41, 0x00, 0x00, 0x00]) => DeviceType::T8,
-                        Ok([0x40, 0xE0, 0x00, 0x00]) => DeviceType::T7,
-                        Ok([0x40, 0x80, 0x00, 0x00]) => DeviceType::T4,
-                        Ok(const_sized) => DeviceType::UNKNOWN(i32::from_be_bytes(const_sized)),
-                        Err(err) => {
-                            eprint!("Could not decode LabJack device type: {}", err);
-                            DeviceType::UNKNOWN(0)
-                        }
-                    };
-
-                    let serial_number =
-                        LabJackSerialNumber(match <[u8; 4]>::try_from(&buf[12..16]) {
-                            Ok(serial) => i32::from_be_bytes(serial),
-                            Err(error) => {
-                                eprint!("Could not decode LabJack serial number: {}", error);
-                                0
+                    let device_type = buf
+                        .get(8..12)
+                        .map(|buffer| match <[u8; 4]>::try_from(buffer) {
+                            Ok([0x41, 0x00, 0x00, 0x00]) => DeviceType::T8,
+                            Ok([0x40, 0xE0, 0x00, 0x00]) => DeviceType::T7,
+                            Ok([0x40, 0x80, 0x00, 0x00]) => DeviceType::T4,
+                            Ok(const_sized) => DeviceType::UNKNOWN(i32::from_be_bytes(const_sized)),
+                            Err(err) => {
+                                eprint!("Could not decode LabJack device type: {}", err);
+                                DeviceType::UNKNOWN(0)
                             }
-                        });
+                        })
+                        .unwrap_or(DeviceType::UNKNOWN(0));
+
+                    let serial_number = LabJackSerialNumber(
+                        buf.get(12..16)
+                            .map(|buffer| match <[u8; 4]>::try_from(buffer) {
+                                Ok(serial) => i32::from_be_bytes(serial),
+                                Err(error) => {
+                                    eprint!("Could not decode LabJack serial number: {}", error);
+                                    0
+                                }
+                            })
+                            .unwrap_or(0),
+                    );
 
                     Some(Ok(LabJackDevice {
                         ip_address: addr.ip(),

@@ -1,14 +1,14 @@
-use crate::prelude::data_types::{Register, StandardDecoder};
+use crate::prelude::data_types::{StandardDecoder};
 use crate::prelude::*;
 use enum_primitive::FromPrimitive;
 use futures_util::sink::SinkExt;
 use log::{debug, error, trace};
 use std::collections::HashSet;
-use std::io::{Read, Write};
+use std::io::{Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, Interest, ReadHalf};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, WriteHalf};
+
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, Notify};
 use tokio_stream::StreamExt;
@@ -73,7 +73,7 @@ pub struct TcpTransport {
 }
 
 impl TcpTransport {
-    pub fn new(mut stream: TcpStream) -> TcpTransport {
+    pub fn new(stream: TcpStream) -> TcpTransport {
         let (read, write) = stream.into_split();
         let fr = FramedRead::new(read, BytesCodec);
         let fw = FramedWrite::new(write, BytesCodec);
@@ -93,7 +93,7 @@ impl TcpTransport {
             .await
         });
 
-        let transport = TcpTransport {
+        TcpTransport {
             unit_id: BASE_UNIT_ID,
             transaction_id: STARTING_TRANSACTION_ID,
 
@@ -102,9 +102,7 @@ impl TcpTransport {
 
             topic: Arc::clone(&topic),
             existing_transactions: HashSet::new(),
-        };
-
-        transport
+        }
     }
 
     async fn listen(
@@ -195,40 +193,44 @@ impl TcpTransport {
 impl Transport for TcpTransport {
     type Error = Error;
 
-    async fn write(&mut self, function: WriteFunction) -> Result<(), Self::Error> {
-        let ComposedMessage { content, .. } = self.compositor().compose_write(&function)?;
+    fn write(&mut self, function: WriteFunction) -> impl std::future::Future<Output = Result<(), Self::Error>> {
+        async move {
+            let ComposedMessage { content, .. } = self.compositor().compose_write(&function)?;
 
-        self.stream_write.lock().await.send(content.clone()).await?;
+            self.stream_write.lock().await.send(content.clone()).await?;
 
-        let (header, packet) = self.topic.wait_on(*&self.transaction_id).await?;
-        let response_header = Header::unpack(packet.as_slice())?;
+            let (header, packet) = self.topic.wait_on(self.transaction_id).await?;
+            let response_header = Header::unpack(packet.as_slice())?;
 
-        TcpTransport::validate_response_header(&header, &response_header)?;
-        TcpTransport::validate_response_code(&content, packet.as_slice())
+            TcpTransport::validate_response_header(&header, &response_header)?;
+            TcpTransport::validate_response_code(&content, packet.as_slice())
+        }
     }
 
-    async fn read(&mut self, function: ReadFunction) -> Result<LabJackDataValue, Self::Error> {
-        let ComposedMessage {
-            content,
-            header,
-            expected_bytes,
-        } = self.compositor().compose_read(&function)?;
+    fn read(&mut self, function: ReadFunction) -> impl std::future::Future<Output = Result<LabJackDataValue, Self::Error>> {
+        async move {
+            let ComposedMessage {
+                content,
+                header,
+                expected_bytes,
+            } = self.compositor().compose_read(&function)?;
 
-        // self.stream_write.lock().await.
-        self.stream_write.lock().await.send(content.clone()).await?;
+            // self.stream_write.lock().await.
+            self.stream_write.lock().await.send(content.clone()).await?;
 
-        // We make a copy of the TID so it is not modified whilst in use
-        let (response_header, packet) = self.topic.wait_on(*&self.transaction_id).await?;
-        debug!("Response contains ... Header={response_header:?}. Packet={packet:?}");
+            // We make a copy of the TID so it is not modified whilst in use
+            let (response_header, packet) = self.topic.wait_on(self.transaction_id).await?;
+            debug!("Response contains ... Header={response_header:?}. Packet={packet:?}");
 
-        TcpTransport::validate_response_header(&header, &response_header)?;
-        TcpTransport::validate_response_code(&content, &packet)?;
+            TcpTransport::validate_response_header(&header, &response_header)?;
+            TcpTransport::validate_response_code(&content, &packet)?;
 
-        let bytes = TcpTransport::get_reply_data(&packet, expected_bytes)?;
-        debug!("Expected reply data: {bytes:?}");
+            let bytes = TcpTransport::get_reply_data(&packet, expected_bytes)?;
+            debug!("Expected reply data: {bytes:?}");
 
-        // TODO: Check expected length and remove 1.. offset.
-        StandardDecoder { bytes }.decode_as(function.0.data_type)
+            // TODO: Check expected length and remove 1.. offset.
+            StandardDecoder { bytes }.decode_as(function.0.data_type)
+        }
     }
 
     // fn feedback(&mut self, data: &[FeedbackFunction]) -> Result<Box<[u8]>, Self::Error> {
@@ -296,7 +298,10 @@ impl Decoder for BytesCodec {
 
         // Read header prefix
         let mut length_bytes = [0u8; MODBUS_HEADER_SIZE];
-        length_bytes.copy_from_slice(&src[..MODBUS_HEADER_SIZE]);
+        length_bytes.copy_from_slice(
+            src.get(..MODBUS_HEADER_SIZE)
+                .ok_or(Error::InvalidData(Reason::UnexpectedReplySize))?,
+        );
         let header = Header::unpack(length_bytes.as_ref())?;
 
         // Check that the length is not too large to avoid a DoS
@@ -317,7 +322,10 @@ impl Decoder for BytesCodec {
         }
 
         // Use advance to modify src such that it no longer contains this frame.
-        let data = src[..expected_size].to_vec();
+        let data = src
+            .get(..expected_size)
+            .ok_or(Error::InvalidResponse)?
+            .to_vec();
         src.advance(expected_size);
 
         // Return the packet as bytes

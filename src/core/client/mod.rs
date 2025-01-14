@@ -1,3 +1,3 @@
-pub mod client;
+pub mod specific;
 
-pub use client::LabJackClient;
+pub use specific::LabJackClient;
