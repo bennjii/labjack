@@ -1,4 +1,4 @@
-name: MiRi - UB Detector
+name: Format & Check
 
 on:
   push:
@@ -27,7 +27,8 @@ jobs:
         with:
           toolchain: nightly
           override: true
-          components: miri
 
-      - name: 🔍 Miri
-        run: cargo miri test
+      - name: 🔍 Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test

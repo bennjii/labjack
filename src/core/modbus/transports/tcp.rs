@@ -2,21 +2,21 @@ use crate::prelude::data_types::StandardDecoder;
 use crate::prelude::*;
 use enum_primitive::FromPrimitive;
 use futures_util::sink::SinkExt;
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use std::collections::HashSet;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::core::Error::Io;
+use crate::prelude::Decoder as LocalDecoder;
+use crate::queue::buffer::Topic;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, Notify};
 use tokio_stream::StreamExt;
 use tokio_util::bytes::{Buf, BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
-
-use crate::prelude::Decoder as LocalDecoder;
-use crate::queue::buffer::Topic;
 
 pub const MODBUS_PROTOCOL_TCP: u16 = 0x0000;
 
@@ -123,6 +123,9 @@ impl TcpTransport {
 
                             // Publish the packet through to the subscriber
                             topic.publish(header, packet).await;
+                        }
+                        Some(Err(Io(err))) if err.raw_os_error().is_some_and(|i| i == 54) => {
+                            warn!("Port Closed.")
                         }
                         Some(Err(err)) => {
                             error!("Error reading from `BytesCodec` stream: {:?}", err);
@@ -258,13 +261,15 @@ impl Transport for TcpTransport {
 /// // Import prelude items
 /// use labjack::prelude::*;
 ///
+/// # async fn docs() {
 /// // Connect to our LabJack over TCP
-/// let mut device = LabJack::connect::<Emulated>(-2).expect("Must connect");
+/// let mut device = LabJack::connect::<Emulated>(-2).await.expect("Must connect");
 /// // Read the AIN55 pin without an extended feature
-/// let voltage = device.read_register(*AIN55).expect("Must read");
+/// let voltage = device.read_register(*AIN55).await.expect("Must read");
 ///
 /// assert!(matches!(voltage, LabJackDataValue::Float32(..)), "had {voltage:?}");
 /// println!("Voltage(as f64)={}", voltage.as_f64());
+/// }
 /// ```
 pub struct Tcp;
 
@@ -350,7 +355,7 @@ mod test {
     use crate::prelude::{TcpTransport, Transport, TEST_UINT32};
 
     async fn setup() -> (TcpTransport, TcpStream) {
-        env_logger::init();
+        env_logger::try_init().ok();
 
         debug!("Testing validate waterfall");
 

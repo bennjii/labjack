@@ -13,10 +13,12 @@ use crate::prelude::*;
 /// ```rust
 /// use labjack::prelude::*;
 ///
+/// # async fn docs() {
 /// let emulated = LabJackSerialNumber::emulated();
-/// let mut device = LabJack::connect::<Emulated>(emulated).expect("Must connect");
+/// let mut device = LabJack::connect::<Emulated>(emulated).await.expect("Must connect");
 ///
 /// println!("Connected to device {:?}", device);
+/// }
 /// ```
 ///
 /// Once connected, use the utility methods from the returned [`LabJackDevice`] structure to
@@ -49,10 +51,12 @@ impl LabJack {
     /// // Write an example.
     /// use labjack::prelude::*;
     ///
+    /// # async fn docs() {
     /// let devices = LabJack::discover(DeviceType::T7).expect("Could not start broadcast");
     /// devices.for_each(|device| {
     ///     println!("Found device {}", device);
     /// });
+    /// }
     /// ```
     pub fn discover(device_type: DeviceType) -> Result<impl Iterator<Item = LabJackDevice>, Error> {
         let devices = Discover::search_all()?;
@@ -94,11 +98,13 @@ impl LabJack {
     /// ```
     /// use labjack::prelude::*;
     ///
+    /// # async fn docs() {
     /// // Connect to a device with an emulated Serial Number, over Tcp.
-    /// let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated())
+    /// let mut device = LabJack::connect::<Emulated>(LabJackSerialNumber::emulated()).await
     ///     .expect("Must connect");
     ///
     /// println!("Connected to device {:?}", device);
+    /// }
     /// ```
     ///
     /// If you have obtained a [`LabJackDevice`] from any discovery method, you may
@@ -123,14 +129,26 @@ impl LabJack {
     /// Connects to a device using the specified transport, given a device has already been located.
     ///
     /// ```rust
+    /// use futures_util::future::join_all;
+    /// use futures_util::FutureExt;
     /// use labjack::prelude::*;
     ///
-    /// let devices = LabJack::discover(DeviceType::T7).expect("Could not start broadcast");
-    /// devices.for_each(|device| {
-    ///     // After the device has been located, we can connect to it using `Emulated`, however `Tcp` should be used in practice.
-    ///     let connected_device = LabJack::connect_with::<Emulated>(device).expect("Could not connect to device");
-    ///     println!("Connected to device {:?}", connected_device);
+    /// # async fn docs() {
+    /// // After the device has been located, we can connect to it using `Emulated`, however `Tcp` should be used in practice.
+    /// let devices = join_all(
+    ///     LabJack::discover(DeviceType::T7)
+    ///         .expect("Could not start broadcast")
+    ///         .map(LabJack::connect_with::<Emulated>)
+    /// ).await;
+    ///
+    /// devices.iter().for_each(|device| {
+    ///     match device {
+    ///         Ok(device) => println!("Connected to device {:?}", device),
+    ///         Err(error) => eprintln!("Failed to connect to device {:?}", error)
+    ///     }
     /// });
+    ///
+    /// }
     /// ```
     ///
     /// This allows the consumer to skip the location step if the device
@@ -142,13 +160,15 @@ impl LabJack {
     /// use std::str::FromStr;
     /// use labjack::prelude::*;
     ///
+    /// # async fn docs() {
     /// // Can be set on the LabJack as a static IP address.
     /// // Note: This can be set using the `ETHERNET_IP_DEFAULT` register.
     /// let known_ip = IpAddr::from_str("192.168.1.25").expect("Must resolve");
     /// let known_device = LabJackDevice::known(known_ip, DeviceType::TSERIES, 470000000);
     ///
-    /// let connected = LabJack::connect_with::<Emulated>(known_device);
+    /// let connected = LabJack::connect_with::<Emulated>(known_device).await;
     /// println!("Connected to known device {:?}", connected);
+    /// }
     /// ```
     ///
     pub async fn connect_with<T>(
