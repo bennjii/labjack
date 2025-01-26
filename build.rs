@@ -15,6 +15,20 @@ use crate::prelude::AccessControl::*;
 
 "#;
 
+fn uppercase_to_pascal_case(input: &str) -> String {
+    let mut words = input.split('_').filter(|w| !w.is_empty());
+    let mut pascal_case = String::new();
+
+    for word in words {
+        if let Some(first_char) = word.chars().next() {
+            pascal_case.push(first_char.to_ascii_uppercase());
+            pascal_case.push_str(&word[1..].to_lowercase());
+        }
+    }
+
+    pascal_case
+}
+
 fn main() {
     // Path to the ljm_constants.json file
     let input_file = "./resources/ljm_constants.json";
@@ -44,6 +58,8 @@ fn main() {
             support_map.version, support_map.support_url
         ))
         .unwrap();
+
+    let mut all_register_names = vec![];
 
     if let Some(registers) = data.get("registers").and_then(|r| r.as_array()) {
         for reg in registers {
@@ -88,6 +104,8 @@ fn main() {
                         format!("{}{}_{}", base_name, i, suffix)
                     };
 
+                    all_register_names.push(expanded_name.clone());
+
                     generate_register(
                         &mut output,
                         Register {
@@ -105,6 +123,8 @@ fn main() {
                     );
                 }
             } else {
+                all_register_names.push(name.to_string());
+
                 // The case when the register does not contain
                 generate_register(
                     &mut output,
@@ -124,6 +144,20 @@ fn main() {
             }
         }
     }
+
+    output.push_str(
+        r#"
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum RegisterList {
+"#,
+    );
+    for reg in all_register_names {
+        output.push_str(&format!(
+            "\t{},\n",
+            uppercase_to_pascal_case(&reg.to_uppercase())
+        ));
+    }
+    output.push_str("}");
 
     // Write the generated code to the output file
     fs::write(&output_file, output).expect("Failed to write output file");
@@ -203,6 +237,7 @@ fn generate_register(
   */
 pub const {}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister {{
     register: Register {{
+        name: RegisterList::{},
         address: {},
         data_type: LabJackDataType::{data_type},
         default_value: {default:?}
@@ -225,6 +260,7 @@ pub const {}: AccessLimitedRegister<{control_value}> = AccessLimitedRegister {{
             .collect::<Vec<_>>()
             .join(", "),
         name.to_uppercase(),
+        uppercase_to_pascal_case(&name),
         base_address + (offset.unwrap_or(0) * size_of(data_type)),
     ));
 }

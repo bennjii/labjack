@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 use num::traits::ToBytes;
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{borrow::Cow, ops::Deref};
 
 macro_rules! impl_traits {
     ($($struct:ident => $value:ty),* $(,)?) => {
@@ -113,6 +113,7 @@ impl<const N: u8> AccessLimitedRegister<N> {
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Register {
+    pub name: RegisterList,
     pub address: u16,
     pub data_type: LabJackDataType,
     pub default_value: Option<f64>,
