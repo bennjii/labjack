@@ -16,7 +16,7 @@ use crate::prelude::AccessControl::*;
 "#;
 
 fn uppercase_to_pascal_case(input: &str) -> String {
-    let mut words = input.split('_').filter(|w| !w.is_empty());
+    let words = input.split('_').filter(|w| !w.is_empty());
     let mut pascal_case = String::new();
 
     for word in words {

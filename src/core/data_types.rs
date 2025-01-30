@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 use num::traits::ToBytes;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, ops::Deref};
+use std::ops::Deref;
 
 macro_rules! impl_traits {
     ($($struct:ident => $value:ty),* $(,)?) => {
