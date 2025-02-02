@@ -1,12 +1,12 @@
 use super::{adc, dac};
 
-pub trait Daq: adc::Adc + dac::Dac {
-    type Digital: From<<Self as adc::Adc>::Digital>;
+pub trait Daq<Ctx>: adc::Adc<Ctx> + dac::Dac {
+    type Digital: From<<Self as adc::Adc<Ctx>>::Digital>;
 }
 
-impl<T> Daq for T
+impl<T, Ctx> Daq<Ctx> for T
 where
-    T: adc::Adc + dac::Dac,
+    T: adc::Adc<Ctx> + dac::Dac,
 {
-    type Digital = <T as adc::Adc>::Digital;
+    type Digital = <T as adc::Adc<Ctx>>::Digital;
 }

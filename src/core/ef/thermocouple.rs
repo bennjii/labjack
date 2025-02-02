@@ -13,6 +13,10 @@ pub enum Thermocouple {
     TypeT,
 }
 
+pub struct ThermocoupleContext {
+    pub cold_junction_temperature: f64,
+}
+
 impl Thermocouple {
     pub(crate) const fn voltage_coefficients(&self) -> &'static [f64] {
         match self {
@@ -193,11 +197,14 @@ impl Thermocouple {
     }
 }
 
-impl Adc for Thermocouple {
+impl Adc<ThermocoupleContext> for Thermocouple {
     type Digital = f64;
 
-    fn to_digital(&self, voltage: LabJackDataValue) -> Self::Digital {
-        self.temp_from_volt(&voltage.as_f64())
+    #[inline]
+    fn to_digital(&self, context: ThermocoupleContext, voltage: LabJackDataValue) -> Self::Digital {
+        let cold_junction_voltage = self.volt_from_temp(&context.cold_junction_temperature);
+        let voltage_sum = voltage.as_f64() + cold_junction_voltage;
+        self.temp_from_volt(&voltage_sum)
     }
 }
 

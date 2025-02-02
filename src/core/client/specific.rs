@@ -20,16 +20,17 @@ where
     }
 
     /// Reads a singular value from a given address on the LabJack.
-    pub async fn read<An>(
+    pub async fn read<An, Ctx>(
         &mut self,
         address: Register,
         channel: An,
-    ) -> Result<<An as Adc>::Digital, Either<Error, <T as Transport>::Error>>
+        context: Ctx,
+    ) -> Result<<An as Adc<Ctx>>::Digital, Either<Error, <T as Transport>::Error>>
     where
-        An: Adc,
+        An: Adc<Ctx>,
     {
         let value = self.read_register(address).await?;
-        Ok(channel.to_digital(value))
+        Ok(channel.to_digital(context, value))
     }
 
     pub async fn read_register(
